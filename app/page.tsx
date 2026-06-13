@@ -18,7 +18,6 @@ interface Listing {
 
 interface PriceGroup {
   listings: Listing[];
-  average: number | null;
   currency: string;
 }
 
@@ -30,47 +29,59 @@ interface SearchResult {
 }
 
 
+function StatCard({ label, price, currency, url, source }: {
+  label: string;
+  price: number | null;
+  currency: string;
+  url?: string;
+  source?: string;
+}) {
+  const symbol = CURRENCY_SYMBOLS[currency] || currency + " ";
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{label}</p>
+      {price ? (
+        <>
+          <p className="text-3xl font-bold tracking-tight">{symbol}{price.toLocaleString()}</p>
+          {url && source && (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 mt-1.5 block hover:text-gray-300 truncate">
+              {source}
+            </a>
+          )}
+        </>
+      ) : (
+        <p className="text-gray-500 text-sm mt-1">No data found</p>
+      )}
+    </div>
+  );
+}
+
 function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
   const symbol = CURRENCY_SYMBOLS[group.currency] || group.currency + " ";
-  if (!group.average && group.listings.length === 0) return null;
+  if (group.listings.length === 0) return null;
 
   return (
-    <div className="mb-8">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-        {group.average ? (
-          <p className="text-3xl font-bold tracking-tight">
-            {symbol}{group.average.toLocaleString()}
-          </p>
-        ) : (
-          <p className="text-gray-500 text-sm mt-1">Not enough data</p>
-        )}
-        <p className="text-xs text-gray-500 mt-1">
-          Based on {group.listings.length} listing{group.listings.length !== 1 ? "s" : ""}
-        </p>
+    <div className="mb-6">
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">{label}</p>
+      <div className="space-y-2">
+        {group.listings.map((listing, i) => (
+          <a
+            key={i}
+            href={listing.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors group"
+          >
+            <div className="flex-1 min-w-0 mr-4">
+              <p className="text-sm text-white truncate">{listing.title}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
+            </div>
+            <p className="text-sm font-semibold text-white flex-shrink-0">
+              {symbol}{listing.price.toLocaleString()}
+            </p>
+          </a>
+        ))}
       </div>
-
-      {group.listings.length > 0 && (
-        <div className="space-y-2">
-          {group.listings.map((listing, i) => (
-            <a
-              key={i}
-              href={listing.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors group"
-            >
-              <div className="flex-1 min-w-0 mr-4">
-                <p className="text-sm text-white truncate">{listing.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
-              </div>
-              <p className="text-sm font-semibold text-white flex-shrink-0">
-                {symbol}{listing.price.toLocaleString()}
-              </p>
-            </a>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -108,8 +119,8 @@ export default function Home() {
       setResult(data);
     } catch {
       setResult({
-        asking: { listings: [], average: null, currency: "GBP" },
-        sold: { listings: [], average: null, currency: "GBP" },
+        asking: { listings: [], currency: "GBP" },
+        sold: { listings: [], currency: "GBP" },
         error: "Something went wrong. Please try again.",
       });
     } finally {
@@ -264,8 +275,36 @@ export default function Home() {
               </div>
             )}
 
-            <ListingsBlock group={result.asking} label="Average Asking Price" />
-            <ListingsBlock group={result.sold} label="Average Sold Price" />
+            {(result.asking.listings.length > 0 || result.sold.listings.length > 0) && (
+              <>
+                <div className="grid grid-cols-1 gap-3 mb-8">
+                  <StatCard
+                    label="Highest Asking Price"
+                    price={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].price : null}
+                    currency={result.asking.currency}
+                    url={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].url : undefined}
+                    source={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].source : undefined}
+                  />
+                  <StatCard
+                    label="Lowest Asking Price"
+                    price={result.asking.listings.length > 0 ? result.asking.listings[0].price : null}
+                    currency={result.asking.currency}
+                    url={result.asking.listings.length > 0 ? result.asking.listings[0].url : undefined}
+                    source={result.asking.listings.length > 0 ? result.asking.listings[0].source : undefined}
+                  />
+                  <StatCard
+                    label="Lowest Sold Price"
+                    price={result.sold.listings.length > 0 ? result.sold.listings[0].price : null}
+                    currency={result.sold.currency}
+                    url={result.sold.listings.length > 0 ? result.sold.listings[0].url : undefined}
+                    source={result.sold.listings.length > 0 ? result.sold.listings[0].source : undefined}
+                  />
+                </div>
+
+                <ListingsBlock group={result.asking} label="All Asking Prices" />
+                <ListingsBlock group={result.sold} label="All Sold Prices" />
+              </>
+            )}
           </div>
         )}
 
