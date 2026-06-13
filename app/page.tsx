@@ -7,6 +7,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£", USD: "$", EUR: "€", AED: "AED ",
 };
 
+const CURRENCIES = ["GBP", "AED", "USD"] as const;
+type Currency = typeof CURRENCIES[number];
+
 interface Listing {
   title: string;
   price: number;
@@ -45,20 +48,23 @@ interface HistoryEntry {
   currency: string;
 }
 
-function StatCard({ label, price, currency, url, source }: {
+function StatCard({ label, price, fromCurrency, displayCurrency, convertPrice, url, source }: {
   label: string;
   price: number | null;
-  currency: string;
+  fromCurrency: string;
+  displayCurrency: string;
+  convertPrice: (p: number, from: string) => number;
   url?: string;
   source?: string;
 }) {
-  const symbol = CURRENCY_SYMBOLS[currency] || currency + " ";
+  const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency + " ";
+  const converted = price ? convertPrice(price, fromCurrency) : null;
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-      {price ? (
+      {converted ? (
         <>
-          <p className="text-3xl font-bold tracking-tight">{symbol}{price.toLocaleString()}</p>
+          <p className="text-3xl font-bold tracking-tight">{symbol}{converted.toLocaleString()}</p>
           {url && source && (
             <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 mt-1.5 block hover:text-gray-300 truncate">
               {source}
@@ -72,8 +78,13 @@ function StatCard({ label, price, currency, url, source }: {
   );
 }
 
-function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
-  const symbol = CURRENCY_SYMBOLS[group.currency] || group.currency + " ";
+function ListingsBlock({ group, label, displayCurrency, convertPrice }: {
+  group: PriceGroup;
+  label: string;
+  displayCurrency: string;
+  convertPrice: (p: number, from: string) => number;
+}) {
+  const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency + " ";
   if (group.listings.length === 0) return null;
   return (
     <div className="mb-6">
@@ -87,7 +98,7 @@ function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
               <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
             </div>
             <p className="text-sm font-semibold text-white flex-shrink-0">
-              {symbol}{listing.price.toLocaleString()}
+              {symbol}{convertPrice(listing.price, listing.currency).toLocaleString()}
             </p>
           </a>
         ))}
@@ -164,6 +175,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [displayCurrency, setDisplayCurrency] = useState<Currency>("GBP");
+  const [rates, setRates] = useState<Record<string, number>>({ GBP: 1, AED: 4.73, USD: 1.27 });
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -171,7 +184,21 @@ export default function Home() {
       const saved = localStorage.getItem("watchHistory");
       if (saved) setHistory(JSON.parse(saved));
     } catch {}
+
+    // Fetch live exchange rates (base GBP)
+    fetch("https://api.frankfurter.app/latest?base=GBP&symbols=AED,USD")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.rates) setRates({ GBP: 1, AED: data.rates.AED, USD: data.rates.USD });
+      })
+      .catch(() => {});
   }, []);
+
+  const convertPrice = (price: number, fromCurrency: string): number => {
+    const from = rates[fromCurrency] ?? 1;
+    const to = rates[displayCurrency] ?? 1;
+    return Math.round((price / from) * to);
+  };
 
   const saveToHistory = (data: SearchResult) => {
     const entry: HistoryEntry = {
@@ -246,9 +273,19 @@ export default function Home() {
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-2xl mx-auto px-4 py-10">
 
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Watch Price Checker</h1>
-          <p className="text-gray-400 text-sm mt-1">Secondary market prices — UK, Dubai & worldwide</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Watch Price Checker</h1>
+            <p className="text-gray-400 text-sm mt-1">Secondary market prices — UK, Dubai & worldwide</p>
+          </div>
+          <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-lg p-1 flex-shrink-0">
+            {CURRENCIES.map((c) => (
+              <button key={c} onClick={() => setDisplayCurrency(c)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${displayCurrency === c ? "bg-white text-gray-950" : "text-gray-400 hover:text-white"}`}>
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -365,22 +402,22 @@ export default function Home() {
                 <div className="grid grid-cols-1 gap-3 mb-8">
                   <StatCard label="Highest Asking Price"
                     price={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].price : null}
-                    currency={result.asking.currency}
+                    fromCurrency={result.asking.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
                     url={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].url : undefined}
                     source={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].source : undefined} />
                   <StatCard label="Lowest Asking Price"
                     price={result.asking.listings.length > 0 ? result.asking.listings[0].price : null}
-                    currency={result.asking.currency}
+                    fromCurrency={result.asking.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
                     url={result.asking.listings.length > 0 ? result.asking.listings[0].url : undefined}
                     source={result.asking.listings.length > 0 ? result.asking.listings[0].source : undefined} />
                   <StatCard label="Lowest Sold Price"
                     price={result.sold.listings.length > 0 ? result.sold.listings[0].price : null}
-                    currency={result.sold.currency}
+                    fromCurrency={result.sold.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
                     url={result.sold.listings.length > 0 ? result.sold.listings[0].url : undefined}
                     source={result.sold.listings.length > 0 ? result.sold.listings[0].source : undefined} />
                 </div>
-                <ListingsBlock group={result.asking} label="All Asking Prices" />
-                <ListingsBlock group={result.sold} label="All Sold Prices" />
+                <ListingsBlock group={result.asking} label="All Asking Prices" displayCurrency={displayCurrency} convertPrice={convertPrice} />
+                <ListingsBlock group={result.sold} label="All Sold Prices" displayCurrency={displayCurrency} convertPrice={convertPrice} />
               </>
             )}
           </div>
