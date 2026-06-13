@@ -7,7 +7,6 @@ const EBAY_APP_ID = process.env.EBAY_APP_ID;
 // Shopify-based dealer sites (support /search.json)
 const SHOPIFY_SITES = [
   "thekettlekids.com",
-  "timepiece360.com",
   "theluxuryaddress.ae",
   "topwatches.ae",
   "timesecret.ae",
@@ -47,6 +46,7 @@ const EXCLUDED_DOMAINS = [
   "hodinkee.com",
   "watchcharts.com",
   "bobswatches.com",
+  "timepiece360.com",
 ];
 
 function extractPrice(text: string): number | null {
@@ -133,7 +133,7 @@ async function searchEbaySold(query: string) {
 }
 
 const UAE_DOMAINS = ["luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
-  "timepiece360.com", "timesecret.ae", "thestore.ae", "theluxuryaddress.ae", "timezonedubai.com", "topwatches.ae"];
+  "timesecret.ae", "thestore.ae", "theluxuryaddress.ae", "timezonedubai.com", "topwatches.ae"];
 
 // ── Shopify JSON search ───────────────────────────────────────────────────────
 async function searchShopifySite(domain: string, query: string) {
