@@ -18,6 +18,7 @@ const DUBAI_SITES = [
 const UK_SITES = [
   "thekettlekids.com",
   "gmgwatches.co.uk",
+  "prestigiousjewellers.com",
   "trottersjewellers.com",
   "watchfinder.co.uk",
   "watchbox.com",
