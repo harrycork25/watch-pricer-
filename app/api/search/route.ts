@@ -70,11 +70,12 @@ function extractPrice(text: string): number | null {
   return null;
 }
 
-function detectCurrency(text: string): string {
+function detectCurrency(text: string, defaultCurrency = "USD"): string {
   if (text.includes("£") || /\bGBP\b/i.test(text)) return "GBP";
   if (/\bAED\b/i.test(text) || text.includes("د.إ")) return "AED";
   if (text.includes("€") || /\bEUR\b/i.test(text)) return "EUR";
-  return "USD";
+  if (text.includes("$") || /\bUSD\b/i.test(text)) return "USD";
+  return defaultCurrency;
 }
 
 function dominantCurrency(listings: { currency: string }[]) {
@@ -131,12 +132,15 @@ async function searchEbaySold(query: string) {
   }
 }
 
+const UAE_DOMAINS = ["luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
+  "timepiece360.com", "timesecret.ae", "thestore.ae", "theluxuryaddress.ae", "timezonedubai.com", "topwatches.ae"];
+
 // ── Shopify JSON search ───────────────────────────────────────────────────────
 async function searchShopifySite(domain: string, query: string) {
+  const defaultCurrency = UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
   try {
-    const protocol = "https";
     const res = await fetch(
-      `${protocol}://${domain}/search?type=product&q=${encodeURIComponent(query)}`,
+      `https://${domain}/search?type=product&q=${encodeURIComponent(query)}`,
       { headers: { Accept: "text/html" }, next: { revalidate: 0 } }
     );
     if (!res.ok) return [];
@@ -144,13 +148,11 @@ async function searchShopifySite(domain: string, query: string) {
     const $ = cheerio.load(html);
     const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
 
-    // Try common Shopify price selectors
     $("[data-price], .price, .product-price, .money").each((_, el) => {
       const priceText = $(el).text().trim();
       const price = extractPrice(priceText);
       if (!price) return;
 
-      // Find the parent product link
       const productEl = $(el).closest("a, [href]").first();
       const href = productEl.attr("href") || "";
       const title = productEl.attr("title") || productEl.find("h2,h3,.title,.product-title").first().text().trim() || priceText;
@@ -159,7 +161,7 @@ async function searchShopifySite(domain: string, query: string) {
         listings.push({
           title,
           price,
-          currency: detectCurrency(priceText),
+          currency: detectCurrency(priceText, defaultCurrency),
           url: href.startsWith("http") ? href : `https://${domain}${href}`,
           source: domain,
         });
@@ -191,7 +193,8 @@ async function serperSiteSearch(query: string, sites: string[]) {
         const fullText = `${r.title} ${r.snippet || ""}`;
         const price = extractPrice(fullText);
         if (!price) return null;
-        return { title: r.title, price, currency: detectCurrency(fullText), url: r.link, source: domain };
+        const defaultCurrency = UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
+        return { title: r.title, price, currency: detectCurrency(fullText, defaultCurrency), url: r.link, source: domain };
       } catch { return null; }
     }).filter(Boolean);
   } catch {
