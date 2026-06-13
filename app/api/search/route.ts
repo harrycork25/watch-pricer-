@@ -1,29 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as cheerio from "cheerio";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
+const EBAY_APP_ID = process.env.EBAY_APP_ID;
 
-const DUBAI_SITES = [
-  "luxurysouq.com",
-  "chrono-group.ae",
-  "chrono-hub.com",
-  "watchmaestro.com",
+// Shopify-based dealer sites (support /search.json)
+const SHOPIFY_SITES = [
+  "thekettlekids.com",
   "timepiece360.com",
+  "theluxuryaddress.ae",
+  "topwatches.ae",
   "timesecret.ae",
   "thestore.ae",
-  "theluxuryaddress.ae",
-  "timezonedubai.com",
-  "topwatches.ae",
+  "watchcollectors.co.uk",
 ];
 
-const UK_SITES = [
-  "thekettlekids.com",
-  "gmgwatches.co.uk",
-  "prestigiousjewellers.com",
-  "trottersjewellers.com",
-  "watchfinder.co.uk",
-  "watchbox.com",
-  "crownandcaliber.com",
-  "watchcollectors.co.uk",
+// Non-Shopify dealer sites (direct HTML scraping)
+const SCRAPE_SITES: { url: string; searchPath: string; priceSelector: string; titleSelector: string; linkSelector: string }[] = [
+  {
+    url: "https://www.gmgwatches.co.uk",
+    searchPath: "/?s=",
+    priceSelector: ".price",
+    titleSelector: ".woocommerce-loop-product__title",
+    linkSelector: "a.woocommerce-LoopProduct-link",
+  },
+  {
+    url: "https://www.trottersjewellers.com",
+    searchPath: "/search?q=",
+    priceSelector: ".price",
+    titleSelector: ".product-title",
+    linkSelector: "a.product-link",
+  },
+  {
+    url: "https://watchfinder.co.uk",
+    searchPath: "/search?q=",
+    priceSelector: "[data-price]",
+    titleSelector: ".watch-title",
+    linkSelector: "a",
+  },
 ];
 
 const EXCLUDED_DOMAINS = [
@@ -34,8 +48,6 @@ const EXCLUDED_DOMAINS = [
   "watchcharts.com",
   "bobswatches.com",
 ];
-
-const ALL_DEALER_SITES = [...DUBAI_SITES, ...UK_SITES];
 
 function extractPrice(text: string): number | null {
   const patterns = [
@@ -48,14 +60,11 @@ function extractPrice(text: string): number | null {
     /USD\s*([\d,]+(?:\.\d{2})?)/i,
     /([\d,]+(?:\.\d{2})?)\s*(?:GBP|USD|EUR)/i,
   ];
-
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
       const value = parseFloat(match[1].replace(/,/g, ""));
-      if (value > 500 && value < 5000000) {
-        return value;
-      }
+      if (value > 500 && value < 5000000) return value;
     }
   }
   return null;
@@ -68,94 +77,173 @@ function detectCurrency(text: string): string {
   return "USD";
 }
 
-async function serperSearch(query: string, num = 10) {
-  const response = await fetch("https://google.serper.dev/search", {
-    method: "POST",
-    headers: {
-      "X-API-KEY": SERPER_API_KEY!,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ q: query, num }),
-  });
-  if (!response.ok) throw new Error(`Serper error: ${response.status}`);
-  return response.json();
-}
-
-async function serperImageSearch(query: string): Promise<string | null> {
-  const response = await fetch("https://google.serper.dev/images", {
-    method: "POST",
-    headers: {
-      "X-API-KEY": SERPER_API_KEY!,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ q: query, num: 5 }),
-  });
-  if (!response.ok) return null;
-  const data = await response.json();
-  const images = data.images || [];
-  // Pick first image that looks like a watch photo (not a logo/icon)
-  for (const img of images) {
-    if (img.imageUrl && img.imageWidth > 200 && img.imageHeight > 200) {
-      return img.imageUrl;
-    }
-  }
-  return images[0]?.imageUrl || null;
-}
-
-function parseResults(
-  results: { title: string; snippet?: string; link: string }[],
-  excludeDomains: string[] = [],
-  allowDomains: string[] = []
-) {
-  const listings: {
-    title: string;
-    price: number;
-    currency: string;
-    url: string;
-    source: string;
-  }[] = [];
-
-  for (const result of results) {
-    try {
-      const domain = new URL(result.link).hostname.replace("www.", "");
-      if (excludeDomains.some((d) => domain.includes(d))) continue;
-      if (allowDomains.length > 0 && !allowDomains.some((d) => domain.includes(d))) continue;
-
-      const fullText = `${result.title} ${result.snippet || ""}`;
-      const price = extractPrice(fullText);
-      if (!price) continue;
-
-      const currency = detectCurrency(fullText);
-      listings.push({ title: result.title, price, currency, url: result.link, source: domain });
-    } catch {
-      continue;
-    }
-  }
-  return listings;
-}
-
-function calcAverage(listings: { price: number }[]) {
-  if (listings.length === 0) return null;
-  const sorted = [...listings].sort((a, b) => a.price - b.price);
-  const median = sorted[Math.floor(sorted.length / 2)].price;
-  const filtered = listings.filter(
-    (l) => l.price >= median * 0.4 && l.price <= median * 2.5
-  );
-  if (filtered.length === 0) return null;
-  return Math.round(filtered.reduce((a, b) => a + b.price, 0) / filtered.length);
-}
-
 function dominantCurrency(listings: { currency: string }[]) {
   const counts: Record<string, number> = {};
   listings.forEach((l) => { counts[l.currency] = (counts[l.currency] || 0) + 1; });
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "GBP";
 }
 
-export async function POST(req: NextRequest) {
-  if (!SERPER_API_KEY) {
-    return NextResponse.json({ error: "Search API key not configured" }, { status: 500 });
-  }
+// ── eBay completed/sold listings ──────────────────────────────────────────────
+async function searchEbaySold(query: string) {
+  if (!EBAY_APP_ID) return [];
+  try {
+    const params = new URLSearchParams({
+      "OPERATION-NAME": "findCompletedItems",
+      "SERVICE-VERSION": "1.0.0",
+      "SECURITY-APPNAME": EBAY_APP_ID,
+      "RESPONSE-DATA-FORMAT": "JSON",
+      "keywords": query,
+      "itemFilter(0).name": "SoldItemsOnly",
+      "itemFilter(0).value": "true",
+      "sortOrder": "EndTimeSoonest",
+      "paginationInput.entriesPerPage": "20",
+    });
 
+    const res = await fetch(
+      `https://svcs.ebay.com/services/search/FindingService/v1?${params}`,
+      { next: { revalidate: 0 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
+
+    return items
+      .filter((item: Record<string, unknown[]>) => (item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] === "EndedWithSales")
+      .map((item: Record<string, unknown[]>) => {
+        const priceObj = item.sellingStatus?.[0] as Record<string, unknown[]>;
+        const priceStr = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.__value__ || "";
+        const currencyId = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.["@currencyId"] || "USD";
+        const price = parseFloat(priceStr);
+        if (!price || price < 500) return null;
+
+        const currencyMap: Record<string, string> = { GBP: "GBP", USD: "USD", EUR: "EUR" };
+        return {
+          title: (item.title?.[0] as string) || "",
+          price,
+          currency: currencyMap[currencyId] || "USD",
+          url: (item.viewItemURL?.[0] as string) || "",
+          source: "ebay.co.uk",
+        };
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// ── Shopify JSON search ───────────────────────────────────────────────────────
+async function searchShopifySite(domain: string, query: string) {
+  try {
+    const protocol = "https";
+    const res = await fetch(
+      `${protocol}://${domain}/search?type=product&q=${encodeURIComponent(query)}`,
+      { headers: { Accept: "text/html" }, next: { revalidate: 0 } }
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
+
+    // Try common Shopify price selectors
+    $("[data-price], .price, .product-price, .money").each((_, el) => {
+      const priceText = $(el).text().trim();
+      const price = extractPrice(priceText);
+      if (!price) return;
+
+      // Find the parent product link
+      const productEl = $(el).closest("a, [href]").first();
+      const href = productEl.attr("href") || "";
+      const title = productEl.attr("title") || productEl.find("h2,h3,.title,.product-title").first().text().trim() || priceText;
+
+      if (price) {
+        listings.push({
+          title,
+          price,
+          currency: detectCurrency(priceText),
+          url: href.startsWith("http") ? href : `https://${domain}${href}`,
+          source: domain,
+        });
+      }
+    });
+
+    return listings.slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+// ── Serper fallback for sites that block scraping ─────────────────────────────
+async function serperSiteSearch(query: string, sites: string[]) {
+  if (!SERPER_API_KEY || sites.length === 0) return [];
+  try {
+    const siteStr = sites.map((s) => `site:${s}`).join(" OR ");
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: `${query} for sale price (${siteStr})`, num: 10 }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.organic || []).map((r: { title: string; snippet?: string; link: string }) => {
+      try {
+        const domain = new URL(r.link).hostname.replace("www.", "");
+        if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) return null;
+        const fullText = `${r.title} ${r.snippet || ""}`;
+        const price = extractPrice(fullText);
+        if (!price) return null;
+        return { title: r.title, price, currency: detectCurrency(fullText), url: r.link, source: domain };
+      } catch { return null; }
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// ── Serper for Chrono24 sold prices ──────────────────────────────────────────
+async function serperChrono24Sold(query: string) {
+  if (!SERPER_API_KEY) return [];
+  try {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: `${query} sold price site:chrono24.com OR site:chrono24.co.uk`, num: 10 }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.organic || []).map((r: { title: string; snippet?: string; link: string }) => {
+      const fullText = `${r.title} ${r.snippet || ""}`;
+      const price = extractPrice(fullText);
+      if (!price) return null;
+      return { title: r.title, price, currency: detectCurrency(fullText), url: r.link, source: "chrono24.com" };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// ── Image search ──────────────────────────────────────────────────────────────
+async function getWatchImage(query: string): Promise<string | null> {
+  if (!SERPER_API_KEY) return null;
+  try {
+    const res = await fetch("https://google.serper.dev/images", {
+      method: "POST",
+      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ q: query, num: 5 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const images = data.images || [];
+    for (const img of images) {
+      if (img.imageUrl && img.imageWidth > 200 && img.imageHeight > 200) return img.imageUrl;
+    }
+    return images[0]?.imageUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+export async function POST(req: NextRequest) {
   const { reference, make, model, year, condition, material, dialColour } = await req.json();
 
   if (!reference) {
@@ -168,68 +256,105 @@ export async function POST(req: NextRequest) {
     dialColour && dialColour !== "any" ? `${dialColour} dial` : "",
   ].filter(Boolean).join(" ");
 
-  const baseQuery = `${make || ""} ${model || ""} ${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`.trim().replace(/\s+/g, " ");
-  const dealerSiteStr = ALL_DEALER_SITES.map((s) => `site:${s}`).join(" OR ");
+  const baseQuery = `${make || ""} ${model || ""} ${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`
+    .trim().replace(/\s+/g, " ");
 
-  try {
-    const imageQuery = `${reference} ${variantTerms} watch`.trim();
+  const imageQuery = `${make || ""} ${model || ""} ${reference} ${variantTerms} watch`.trim().replace(/\s+/g, " ");
 
-    const [dealerData, ebayData, soldData, chrono24SoldData, watchImage] = await Promise.all([
-      // Search specific dealer sites
-      serperSearch(`${baseQuery} for sale price (${dealerSiteStr})`, 10),
-      // eBay sold/completed listings
-      serperSearch(`${baseQuery} sold completed listing site:ebay.co.uk OR site:ebay.com`, 10),
-      // General sold prices
-      serperSearch(`${baseQuery} sold price`, 10),
-      // Chrono24 sold prices only
-      serperSearch(`${reference} ${variantTerms} sold price site:chrono24.com OR site:chrono24.co.uk`, 10),
-      // Watch image
-      serperImageSearch(imageQuery),
-    ]);
+  // Dubai sites — use Serper since they're harder to scrape
+  const DUBAI_SITES = [
+    "luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
+    "timepiece360.com", "timesecret.ae", "thestore.ae", "theluxuryaddress.ae",
+    "timezonedubai.com", "topwatches.ae",
+  ];
 
-    // Asking prices — from dealers (apply all exclusions)
-    const askingListings = parseResults(
-      [...(dealerData.organic || [])],
-      EXCLUDED_DOMAINS
-    );
+  // Non-Shopify UK sites — use Serper as fallback
+  const UK_SERPER_SITES = [
+    "prestigiousjewellers.com", "watchfinder.co.uk", "watchbox.com", "crownandcaliber.com",
+  ];
 
-    // Sold prices — eBay + general sold + Chrono24 sold (exclude non-sold exclusions but keep Chrono24 sold)
-    const soldExclusions = EXCLUDED_DOMAINS.filter(d => !d.includes("chrono24"));
-    const soldListings = parseResults([
-      ...(ebayData.organic || []),
-      ...(soldData.organic || []),
-      ...(chrono24SoldData.organic || []),
-    ], soldExclusions);
+  const [
+    ebayResults,
+    chrono24Results,
+    shopifyResults,
+    dubaiResults,
+    ukSerperResults,
+    watchImage,
+  ] = await Promise.all([
+    searchEbaySold(baseQuery),
+    serperChrono24Sold(baseQuery),
+    Promise.all(SHOPIFY_SITES.map((site) => searchShopifySite(site, `${make || ""} ${model || ""} ${reference}`.trim()))).then((r) => r.flat()),
+    serperSiteSearch(baseQuery, DUBAI_SITES),
+    serperSiteSearch(baseQuery, UK_SERPER_SITES),
+    getWatchImage(imageQuery),
+  ]);
 
-    // Deduplicate sold listings by URL
-    const seenUrls = new Set<string>();
-    const dedupedSold = soldListings.filter((l) => {
-      if (seenUrls.has(l.url)) return false;
-      seenUrls.add(l.url);
-      return true;
-    });
+  // Also scrape the non-Shopify UK sites directly
+  const directScrapeResults = await Promise.all(
+    SCRAPE_SITES.map(async (site) => {
+      try {
+        const res = await fetch(`${site.url}${site.searchPath}${encodeURIComponent(`${reference}`)}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; WatchPricer/1.0)" },
+          next: { revalidate: 0 },
+        });
+        if (!res.ok) return [];
+        const html = await res.text();
+        const $ = cheerio.load(html);
+        const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
+        $(site.priceSelector).each((_, el) => {
+          const priceText = $(el).text().trim();
+          const price = extractPrice(priceText);
+          if (!price) return;
+          const parent = $(el).closest("li, article, .product, [class*='product']");
+          const title = parent.find(site.titleSelector).text().trim() || reference;
+          const href = parent.find(site.linkSelector).attr("href") || "";
+          listings.push({
+            title, price,
+            currency: detectCurrency(priceText),
+            url: href.startsWith("http") ? href : `${site.url}${href}`,
+            source: new URL(site.url).hostname.replace("www.", ""),
+          });
+        });
+        return listings.slice(0, 5);
+      } catch { return []; }
+    })
+  ).then((r) => r.flat());
 
-    const askingCurrency = dominantCurrency(askingListings);
-    const soldCurrency = dominantCurrency(dedupedSold.length > 0 ? dedupedSold : askingListings);
+  // Combine asking prices
+  const askingListings = [
+    ...shopifyResults,
+    ...dubaiResults,
+    ...ukSerperResults,
+    ...directScrapeResults,
+  ].filter((l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d)));
 
-    const filteredAsking = askingListings.filter((l) => l.currency === askingCurrency);
-    const filteredSold = dedupedSold.filter((l) => l.currency === soldCurrency);
+  // Combine sold prices
+  const soldListings = [
+    ...ebayResults,
+    ...chrono24Results,
+  ].filter((l) => !EXCLUDED_DOMAINS.filter(d => !d.includes("chrono24")).some((d) => l.source.includes(d)));
 
-    return NextResponse.json({
-      watchImage,
-      asking: {
-        listings: filteredAsking.sort((a, b) => a.price - b.price),
-        average: calcAverage(filteredAsking),
-        currency: askingCurrency,
-      },
-      sold: {
-        listings: filteredSold.sort((a, b) => a.price - b.price),
-        average: calcAverage(filteredSold),
-        currency: soldCurrency,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Search failed. Please try again." }, { status: 500 });
-  }
+  // Deduplicate by URL
+  const dedup = (arr: typeof askingListings) => {
+    const seen = new Set<string>();
+    return arr.filter((l) => { if (seen.has(l.url)) return false; seen.add(l.url); return true; });
+  };
+
+  const dedupedAsking = dedup(askingListings);
+  const dedupedSold = dedup(soldListings);
+
+  const askingCurrency = dominantCurrency(dedupedAsking.length > 0 ? dedupedAsking : [{ currency: "GBP" }]);
+  const soldCurrency = dominantCurrency(dedupedSold.length > 0 ? dedupedSold : [{ currency: "GBP" }]);
+
+  return NextResponse.json({
+    watchImage,
+    asking: {
+      listings: dedupedAsking.filter((l) => l.currency === askingCurrency).sort((a, b) => a.price - b.price),
+      currency: askingCurrency,
+    },
+    sold: {
+      listings: dedupedSold.filter((l) => l.currency === soldCurrency).sort((a, b) => a.price - b.price),
+      currency: soldCurrency,
+    },
+  });
 }
