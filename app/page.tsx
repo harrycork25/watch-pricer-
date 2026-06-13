@@ -87,6 +87,8 @@ function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
 }
 
 export default function Home() {
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
   const [reference, setReference] = useState("");
   const [year, setYear] = useState("");
   const [condition, setCondition] = useState<"new" | "used">("used");
@@ -113,7 +115,7 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: reference.trim(), year, condition, material, dialColour }),
+        body: JSON.stringify({ reference: reference.trim(), make: make.trim(), model: model.trim(), year, condition, material, dialColour }),
       });
       const data = await res.json();
       setResult(data);
@@ -139,16 +141,40 @@ export default function Home() {
 
         <div className="space-y-4">
 
-          <div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Make</label>
+              <input
+                type="text"
+                value={make}
+                onChange={(e) => setMake(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="e.g. Rolex"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Model</label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="e.g. Submariner"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+              />
+            </div>
+            <div>
             <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Reference Number</label>
             <input
               type="text"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="e.g. 126610LN, 5711A, 321.30.44.52.01.001"
+              placeholder="e.g. 126610LN"
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
             />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

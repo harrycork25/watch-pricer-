@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Search API key not configured" }, { status: 500 });
   }
 
-  const { reference, year, condition, material, dialColour } = await req.json();
+  const { reference, make, model, year, condition, material, dialColour } = await req.json();
 
   if (!reference) {
     return NextResponse.json({ error: "Reference number is required" }, { status: 400 });
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
     dialColour && dialColour !== "any" ? `${dialColour} dial` : "",
   ].filter(Boolean).join(" ");
 
-  const baseQuery = `${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`.trim();
+  const baseQuery = `${make || ""} ${model || ""} ${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`.trim().replace(/\s+/g, " ");
   const dealerSiteStr = ALL_DEALER_SITES.map((s) => `site:${s}`).join(" OR ");
 
   try {
