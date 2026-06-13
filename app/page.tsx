@@ -48,6 +48,7 @@ interface PriceGroup {
 interface SearchResult {
   asking: PriceGroup;
   sold: PriceGroup;
+  watchImage?: string | null;
   error?: string;
 }
 
@@ -265,6 +266,21 @@ export default function Home() {
             {result.error && (
               <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm mb-6">
                 {result.error}
+              </div>
+            )}
+
+            {result.watchImage && (
+              <div className="mb-6">
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Watch Reference</p>
+                <div className="relative w-full h-56 rounded-xl overflow-hidden bg-gray-900 border border-gray-800">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={result.watchImage}
+                    alt="Watch reference"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <p className="text-xs text-gray-600 mt-1.5">Confirm this matches the watch you are pricing</p>
               </div>
             )}
 

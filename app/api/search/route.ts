@@ -73,6 +73,27 @@ async function serperSearch(query: string, num = 10) {
   return response.json();
 }
 
+async function serperImageSearch(query: string): Promise<string | null> {
+  const response = await fetch("https://google.serper.dev/images", {
+    method: "POST",
+    headers: {
+      "X-API-KEY": SERPER_API_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ q: query, num: 5 }),
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  const images = data.images || [];
+  // Pick first image that looks like a watch photo (not a logo/icon)
+  for (const img of images) {
+    if (img.imageUrl && img.imageWidth > 200 && img.imageHeight > 200) {
+      return img.imageUrl;
+    }
+  }
+  return images[0]?.imageUrl || null;
+}
+
 function parseResults(
   results: { title: string; snippet?: string; link: string }[],
   excludeDomains: string[] = [],
@@ -143,7 +164,9 @@ export async function POST(req: NextRequest) {
   const dealerSiteStr = ALL_DEALER_SITES.map((s) => `site:${s}`).join(" OR ");
 
   try {
-    const [dealerData, ebayData, soldData, chrono24SoldData] = await Promise.all([
+    const imageQuery = `${reference} ${variantTerms} watch`.trim();
+
+    const [dealerData, ebayData, soldData, chrono24SoldData, watchImage] = await Promise.all([
       // Search specific dealer sites
       serperSearch(`${baseQuery} for sale price (${dealerSiteStr})`, 10),
       // eBay sold/completed listings
@@ -152,6 +175,8 @@ export async function POST(req: NextRequest) {
       serperSearch(`${baseQuery} sold price`, 10),
       // Chrono24 sold prices only
       serperSearch(`${reference} ${variantTerms} sold price site:chrono24.com OR site:chrono24.co.uk`, 10),
+      // Watch image
+      serperImageSearch(imageQuery),
     ]);
 
     // Asking prices — from dealers (exclude Chrono24)
@@ -182,6 +207,7 @@ export async function POST(req: NextRequest) {
     const filteredSold = dedupedSold.filter((l) => l.currency === soldCurrency);
 
     return NextResponse.json({
+      watchImage,
       asking: {
         listings: filteredAsking.sort((a, b) => a.price - b.price),
         average: calcAverage(filteredAsking),
