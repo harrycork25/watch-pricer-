@@ -3,29 +3,6 @@
 import { useState, useRef } from "react";
 import Image from "next/image";
 
-const MATERIALS = [
-  { value: "any", label: "Any" },
-  { value: "stainless steel", label: "Stainless Steel" },
-  { value: "yellow gold", label: "Yellow Gold" },
-  { value: "white gold", label: "White Gold" },
-  { value: "rose gold", label: "Rose Gold" },
-  { value: "two-tone", label: "Two-Tone" },
-  { value: "platinum", label: "Platinum" },
-  { value: "titanium", label: "Titanium" },
-];
-
-const DIAL_COLOURS = [
-  { value: "any", label: "Any" },
-  { value: "black", label: "Black" },
-  { value: "white", label: "White" },
-  { value: "blue", label: "Blue" },
-  { value: "green", label: "Green" },
-  { value: "grey", label: "Grey" },
-  { value: "silver", label: "Silver" },
-  { value: "brown", label: "Brown" },
-  { value: "champagne", label: "Champagne" },
-  { value: "red", label: "Red / Burgundy" },
-];
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£", USD: "$", EUR: "€", AED: "AED ",
@@ -52,27 +29,6 @@ interface SearchResult {
   error?: string;
 }
 
-function Select({ label, value, onChange, options }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gray-500 text-sm appearance-none"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
   const symbol = CURRENCY_SYMBOLS[group.currency] || group.currency + " ";
@@ -215,8 +171,26 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Case Material" value={material} onChange={setMaterial} options={MATERIALS} />
-            <Select label="Dial Colour" value={dialColour} onChange={setDialColour} options={DIAL_COLOURS} />
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Case Material</label>
+              <input
+                type="text"
+                value={material === "any" ? "" : material}
+                onChange={(e) => setMaterial(e.target.value || "any")}
+                placeholder="e.g. bimetal, full gold"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Dial Colour</label>
+              <input
+                type="text"
+                value={dialColour === "any" ? "" : dialColour}
+                onChange={(e) => setDialColour(e.target.value || "any")}
+                placeholder="e.g. black, blue"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm"
+              />
+            </div>
           </div>
 
           <div>
