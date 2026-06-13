@@ -3,6 +3,34 @@
 import { useState, useRef } from "react";
 import Image from "next/image";
 
+const MATERIALS = [
+  { value: "any", label: "Any" },
+  { value: "stainless steel", label: "Stainless Steel" },
+  { value: "yellow gold", label: "Yellow Gold" },
+  { value: "white gold", label: "White Gold" },
+  { value: "rose gold", label: "Rose Gold" },
+  { value: "two-tone", label: "Two-Tone" },
+  { value: "platinum", label: "Platinum" },
+  { value: "titanium", label: "Titanium" },
+];
+
+const DIAL_COLOURS = [
+  { value: "any", label: "Any" },
+  { value: "black", label: "Black" },
+  { value: "white", label: "White" },
+  { value: "blue", label: "Blue" },
+  { value: "green", label: "Green" },
+  { value: "grey", label: "Grey" },
+  { value: "silver", label: "Silver" },
+  { value: "brown", label: "Brown" },
+  { value: "champagne", label: "Champagne" },
+  { value: "red", label: "Red / Burgundy" },
+];
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  GBP: "£", USD: "$", EUR: "€", AED: "AED ",
+};
+
 interface Listing {
   title: string;
   price: number;
@@ -11,25 +39,91 @@ interface Listing {
   source: string;
 }
 
-interface SearchResult {
+interface PriceGroup {
   listings: Listing[];
   average: number | null;
   currency: string;
-  totalFound: number;
-  message?: string;
+}
+
+interface SearchResult {
+  asking: PriceGroup;
+  sold: PriceGroup;
   error?: string;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  GBP: "£",
-  USD: "$",
-  EUR: "€",
-};
+function Select({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gray-500 text-sm appearance-none"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function ListingsBlock({ group, label }: { group: PriceGroup; label: string }) {
+  const symbol = CURRENCY_SYMBOLS[group.currency] || group.currency + " ";
+  if (!group.average && group.listings.length === 0) return null;
+
+  return (
+    <div className="mb-8">
+      <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{label}</p>
+        {group.average ? (
+          <p className="text-3xl font-bold tracking-tight">
+            {symbol}{group.average.toLocaleString()}
+          </p>
+        ) : (
+          <p className="text-gray-500 text-sm mt-1">Not enough data</p>
+        )}
+        <p className="text-xs text-gray-500 mt-1">
+          Based on {group.listings.length} listing{group.listings.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      {group.listings.length > 0 && (
+        <div className="space-y-2">
+          {group.listings.map((listing, i) => (
+            <a
+              key={i}
+              href={listing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors group"
+            >
+              <div className="flex-1 min-w-0 mr-4">
+                <p className="text-sm text-white truncate">{listing.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
+              </div>
+              <p className="text-sm font-semibold text-white flex-shrink-0">
+                {symbol}{listing.price.toLocaleString()}
+              </p>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const [reference, setReference] = useState("");
   const [year, setYear] = useState("");
   const [condition, setCondition] = useState<"new" | "used">("used");
+  const [material, setMaterial] = useState("any");
+  const [dialColour, setDialColour] = useState("any");
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -51,30 +145,30 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: reference.trim(), year, condition }),
+        body: JSON.stringify({ reference: reference.trim(), year, condition, material, dialColour }),
       });
       const data = await res.json();
       setResult(data);
     } catch {
-      setResult({ listings: [], average: null, currency: "GBP", totalFound: 0, error: "Something went wrong. Please try again." });
+      setResult({
+        asking: { listings: [], average: null, currency: "GBP" },
+        sold: { listings: [], average: null, currency: "GBP" },
+        error: "Something went wrong. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const symbol = result?.currency ? CURRENCY_SYMBOLS[result.currency] || result.currency : "£";
-
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-2xl mx-auto px-4 py-10">
 
-        {/* Header */}
-        <div className="mb-10">
+        <div className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">Watch Price Checker</h1>
-          <p className="text-gray-400 text-sm mt-1">Enter a reference number to get live market prices</p>
+          <p className="text-gray-400 text-sm mt-1">Secondary market prices — UK, Dubai & worldwide</p>
         </div>
 
-        {/* Form */}
         <div className="space-y-4">
 
           <div>
@@ -105,21 +199,13 @@ export default function Home() {
               <div className="flex gap-2 h-[46px]">
                 <button
                   onClick={() => setCondition("used")}
-                  className={`flex-1 rounded-lg text-sm font-medium border transition-colors ${
-                    condition === "used"
-                      ? "bg-white text-gray-950 border-white"
-                      : "bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500"
-                  }`}
+                  className={`flex-1 rounded-lg text-sm font-medium border transition-colors ${condition === "used" ? "bg-white text-gray-950 border-white" : "bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500"}`}
                 >
                   Used
                 </button>
                 <button
                   onClick={() => setCondition("new")}
-                  className={`flex-1 rounded-lg text-sm font-medium border transition-colors ${
-                    condition === "new"
-                      ? "bg-white text-gray-950 border-white"
-                      : "bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500"
-                  }`}
+                  className={`flex-1 rounded-lg text-sm font-medium border transition-colors ${condition === "new" ? "bg-white text-gray-950 border-white" : "bg-gray-900 text-gray-400 border-gray-700 hover:border-gray-500"}`}
                 >
                   New
                 </button>
@@ -127,7 +213,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Photo upload */}
+          <div className="grid grid-cols-2 gap-4">
+            <Select label="Case Material" value={material} onChange={setMaterial} options={MATERIALS} />
+            <Select label="Dial Colour" value={dialColour} onChange={setDialColour} options={DIAL_COLOURS} />
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Photo (optional)</label>
             <div
@@ -141,8 +231,7 @@ export default function Home() {
                   </div>
                   <div className="text-sm text-gray-400">
                     <span className="text-white">Photo added</span>
-                    <br />
-                    <span className="text-xs">Click to change</span>
+                    <br /><span className="text-xs">Tap to change</span>
                   </div>
                 </>
               ) : (
@@ -157,13 +246,12 @@ export default function Home() {
           <button
             onClick={handleSearch}
             disabled={!reference.trim() || loading}
-            className="w-full bg-white text-gray-950 rounded-lg py-3 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors mt-2"
+            className="w-full bg-white text-gray-950 rounded-lg py-3 font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
           >
             {loading ? "Searching..." : "Search Prices"}
           </button>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="mt-10 space-y-3">
             {[...Array(4)].map((_, i) => (
@@ -172,61 +260,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* Results */}
         {result && !loading && (
           <div className="mt-10">
             {result.error && (
-              <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm">
+              <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm mb-6">
                 {result.error}
               </div>
             )}
 
-            {result.message && !result.error && (
+            {!result.error && result.asking.listings.length === 0 && result.sold.listings.length === 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-400 text-sm">
-                {result.message}
+                No priced listings found. Try adjusting the reference number or removing the year.
               </div>
             )}
 
-            {result.average && (
-              <>
-                {/* Average price */}
-                <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 mb-6">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Average Market Price</p>
-                  <p className="text-4xl font-bold tracking-tight">
-                    {symbol}{result.average.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Based on {result.listings.length} listing{result.listings.length !== 1 ? "s" : ""} · {condition === "new" ? "New" : "Pre-owned"} · {year || "any year"}
-                  </p>
-                </div>
-
-                {/* Individual listings */}
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Listings Found</p>
-                <div className="space-y-2">
-                  {result.listings.map((listing, i) => (
-                    <a
-                      key={i}
-                      href={listing.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors group"
-                    >
-                      <div className="flex-1 min-w-0 mr-4">
-                        <p className="text-sm text-white truncate group-hover:text-gray-200">{listing.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
-                      </div>
-                      <p className="text-sm font-semibold text-white flex-shrink-0">
-                        {symbol}{listing.price.toLocaleString()}
-                      </p>
-                    </a>
-                  ))}
-                </div>
-              </>
-            )}
+            <ListingsBlock group={result.asking} label="Average Asking Price" />
+            <ListingsBlock group={result.sold} label="Average Sold Price" />
           </div>
         )}
 
-        <p className="text-xs text-gray-700 text-center mt-12">Prices exclude Chrono24 · Results are asking prices from indexed listings</p>
+        <p className="text-xs text-gray-700 text-center mt-12">
+          Searches UK & Dubai secondary market dealers · Chrono24 sold prices only · Excludes authorised dealers
+        </p>
       </div>
     </main>
   );

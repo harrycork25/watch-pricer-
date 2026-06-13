@@ -2,13 +2,39 @@ import { NextRequest, NextResponse } from "next/server";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 
-const EXCLUDED_DOMAINS = ["chrono24.com", "chrono24.co.uk"];
+const DUBAI_SITES = [
+  "luxurysouq.com",
+  "chrono-group.ae",
+  "chrono-hub.com",
+  "watchmaestro.com",
+  "timepiece360.com",
+  "timesecret.ae",
+  "thestore.ae",
+  "theluxuryaddress.ae",
+  "timezonedubai.com",
+  "topwatches.ae",
+];
+
+const UK_SITES = [
+  "thekettlekids.com",
+  "gmgwatches.co.uk",
+  "trottersjewellers.com",
+  "watchfinder.co.uk",
+  "watchbox.com",
+  "bobswatches.com",
+  "crownandcaliber.com",
+  "watchcollectors.co.uk",
+];
+
+const ALL_DEALER_SITES = [...DUBAI_SITES, ...UK_SITES];
 
 function extractPrice(text: string): number | null {
   const patterns = [
     /£([\d,]+(?:\.\d{2})?)/,
     /\$([\d,]+(?:\.\d{2})?)/,
     /€([\d,]+(?:\.\d{2})?)/,
+    /AED\s*([\d,]+(?:\.\d{2})?)/i,
+    /([\d,]+(?:\.\d{2})?)\s*AED/i,
     /GBP\s*([\d,]+(?:\.\d{2})?)/i,
     /USD\s*([\d,]+(?:\.\d{2})?)/i,
     /([\d,]+(?:\.\d{2})?)\s*(?:GBP|USD|EUR)/i,
@@ -27,23 +53,72 @@ function extractPrice(text: string): number | null {
 }
 
 function detectCurrency(text: string): string {
-  if (text.includes("£") || text.toLowerCase().includes("gbp")) return "GBP";
-  if (text.includes("€") || text.toLowerCase().includes("eur")) return "EUR";
+  if (text.includes("£") || /\bGBP\b/i.test(text)) return "GBP";
+  if (/\bAED\b/i.test(text) || text.includes("د.إ")) return "AED";
+  if (text.includes("€") || /\bEUR\b/i.test(text)) return "EUR";
   return "USD";
 }
 
-async function searchSerper(query: string) {
+async function serperSearch(query: string, num = 10) {
   const response = await fetch("https://google.serper.dev/search", {
     method: "POST",
     headers: {
       "X-API-KEY": SERPER_API_KEY!,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ q: query, num: 20 }),
+    body: JSON.stringify({ q: query, num }),
   });
-
-  if (!response.ok) throw new Error(`Serper API error: ${response.status}`);
+  if (!response.ok) throw new Error(`Serper error: ${response.status}`);
   return response.json();
+}
+
+function parseResults(
+  results: { title: string; snippet?: string; link: string }[],
+  excludeDomains: string[] = [],
+  allowDomains: string[] = []
+) {
+  const listings: {
+    title: string;
+    price: number;
+    currency: string;
+    url: string;
+    source: string;
+  }[] = [];
+
+  for (const result of results) {
+    try {
+      const domain = new URL(result.link).hostname.replace("www.", "");
+      if (excludeDomains.some((d) => domain.includes(d))) continue;
+      if (allowDomains.length > 0 && !allowDomains.some((d) => domain.includes(d))) continue;
+
+      const fullText = `${result.title} ${result.snippet || ""}`;
+      const price = extractPrice(fullText);
+      if (!price) continue;
+
+      const currency = detectCurrency(fullText);
+      listings.push({ title: result.title, price, currency, url: result.link, source: domain });
+    } catch {
+      continue;
+    }
+  }
+  return listings;
+}
+
+function calcAverage(listings: { price: number }[]) {
+  if (listings.length === 0) return null;
+  const sorted = [...listings].sort((a, b) => a.price - b.price);
+  const median = sorted[Math.floor(sorted.length / 2)].price;
+  const filtered = listings.filter(
+    (l) => l.price >= median * 0.4 && l.price <= median * 2.5
+  );
+  if (filtered.length === 0) return null;
+  return Math.round(filtered.reduce((a, b) => a + b.price, 0) / filtered.length);
+}
+
+function dominantCurrency(listings: { currency: string }[]) {
+  const counts: Record<string, number> = {};
+  listings.forEach((l) => { counts[l.currency] = (counts[l.currency] || 0) + 1; });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "GBP";
 }
 
 export async function POST(req: NextRequest) {
@@ -51,101 +126,71 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Search API key not configured" }, { status: 500 });
   }
 
-  const { reference, year, condition } = await req.json();
+  const { reference, year, condition, material, dialColour } = await req.json();
 
   if (!reference) {
     return NextResponse.json({ error: "Reference number is required" }, { status: 400 });
   }
 
   const conditionTerm = condition === "new" ? "new unworn" : "pre-owned";
-  const yearTerm = year ? `${year}` : "";
-  const query = `${reference} ${yearTerm} ${conditionTerm} watch for sale price`.trim();
+  const variantTerms = [
+    material && material !== "any" ? material : "",
+    dialColour && dialColour !== "any" ? `${dialColour} dial` : "",
+  ].filter(Boolean).join(" ");
+
+  const baseQuery = `${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`.trim();
+  const dealerSiteStr = ALL_DEALER_SITES.map((s) => `site:${s}`).join(" OR ");
 
   try {
-    const data = await searchSerper(query);
-    const results = data.organic || [];
+    const [dealerData, ebayData, soldData, chrono24SoldData] = await Promise.all([
+      // Search specific dealer sites
+      serperSearch(`${baseQuery} for sale price (${dealerSiteStr})`, 10),
+      // eBay sold/completed listings
+      serperSearch(`${baseQuery} sold completed listing site:ebay.co.uk OR site:ebay.com`, 10),
+      // General sold prices
+      serperSearch(`${baseQuery} sold price`, 10),
+      // Chrono24 sold prices only
+      serperSearch(`${reference} ${variantTerms} sold price site:chrono24.com OR site:chrono24.co.uk`, 10),
+    ]);
 
-    const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
+    // Asking prices — from dealers (exclude Chrono24)
+    const askingListings = parseResults(
+      [...(dealerData.organic || [])],
+      ["chrono24.com", "chrono24.co.uk"]
+    );
 
-    for (const result of results) {
-      try {
-        const domain = new URL(result.link).hostname.replace("www.", "");
-        if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) continue;
+    // Sold prices — eBay + general sold + Chrono24 sold
+    const soldListings = parseResults([
+      ...(ebayData.organic || []),
+      ...(soldData.organic || []),
+      ...(chrono24SoldData.organic || []),
+    ], []);
 
-        const fullText = `${result.title} ${result.snippet || ""}`;
-        const price = extractPrice(fullText);
-
-        if (price) {
-          const currency = detectCurrency(fullText);
-          listings.push({
-            title: result.title,
-            price,
-            currency,
-            url: result.link,
-            source: domain,
-          });
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    // If fewer than 3 results, do a broader search
-    if (listings.length < 3) {
-      const broadData = await searchSerper(`${reference} watch buy price`);
-      const broadResults = broadData.organic || [];
-
-      for (const result of broadResults) {
-        try {
-          const domain = new URL(result.link).hostname.replace("www.", "");
-          if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) continue;
-          if (listings.some((l) => l.url === result.link)) continue;
-
-          const fullText = `${result.title} ${result.snippet || ""}`;
-          const price = extractPrice(fullText);
-
-          if (price) {
-            const currency = detectCurrency(fullText);
-            listings.push({ title: result.title, price, currency, url: result.link, source: domain });
-          }
-        } catch {
-          continue;
-        }
-      }
-    }
-
-    if (listings.length === 0) {
-      return NextResponse.json({
-        listings: [],
-        average: null,
-        message: "No priced listings found. Try adjusting the reference number.",
-      });
-    }
-
-    // Find dominant currency
-    const currencyCount: Record<string, number> = {};
-    listings.forEach((l) => {
-      currencyCount[l.currency] = (currencyCount[l.currency] || 0) + 1;
+    // Deduplicate sold listings by URL
+    const seenUrls = new Set<string>();
+    const dedupedSold = soldListings.filter((l) => {
+      if (seenUrls.has(l.url)) return false;
+      seenUrls.add(l.url);
+      return true;
     });
-    const dominantCurrency = Object.entries(currencyCount).sort((a, b) => b[1] - a[1])[0][0];
-    const sameCurrencyListings = listings.filter((l) => l.currency === dominantCurrency);
 
-    // Remove outliers
-    const sorted = [...sameCurrencyListings].sort((a, b) => a.price - b.price);
-    const median = sorted[Math.floor(sorted.length / 2)].price;
-    const filtered = sameCurrencyListings.filter(
-      (l) => l.price >= median * 0.4 && l.price <= median * 2.5
-    );
+    const askingCurrency = dominantCurrency(askingListings);
+    const soldCurrency = dominantCurrency(dedupedSold.length > 0 ? dedupedSold : askingListings);
 
-    const average = Math.round(
-      filtered.reduce((a, b) => a + b.price, 0) / filtered.length
-    );
+    const filteredAsking = askingListings.filter((l) => l.currency === askingCurrency);
+    const filteredSold = dedupedSold.filter((l) => l.currency === soldCurrency);
 
     return NextResponse.json({
-      listings: filtered.sort((a, b) => a.price - b.price),
-      average,
-      currency: dominantCurrency,
-      totalFound: listings.length,
+      asking: {
+        listings: filteredAsking.sort((a, b) => a.price - b.price),
+        average: calcAverage(filteredAsking),
+        currency: askingCurrency,
+      },
+      sold: {
+        listings: filteredSold.sort((a, b) => a.price - b.price),
+        average: calcAverage(filteredSold),
+        currency: soldCurrency,
+      },
     });
   } catch (err) {
     console.error(err);
