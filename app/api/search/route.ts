@@ -22,18 +22,26 @@ const UK_SITES = [
   "trottersjewellers.com",
   "watchfinder.co.uk",
   "watchbox.com",
-  "bobswatches.com",
   "crownandcaliber.com",
   "watchcollectors.co.uk",
+];
+
+const EXCLUDED_DOMAINS = [
+  "chrono24.com",
+  "chrono24.co.uk",
+  "instagram.com",
+  "hodinkee.com",
+  "watchcharts.com",
+  "bobswatches.com",
 ];
 
 const ALL_DEALER_SITES = [...DUBAI_SITES, ...UK_SITES];
 
 function extractPrice(text: string): number | null {
   const patterns = [
-    /£([\d,]+(?:\.\d{2})?)/,
-    /\$([\d,]+(?:\.\d{2})?)/,
-    /€([\d,]+(?:\.\d{2})?)/,
+    /(?:sold\s+for\s+)?£([\d,]+(?:\.\d{2})?)/i,
+    /(?:sold\s+for\s+)?\$([\d,]+(?:\.\d{2})?)/i,
+    /(?:sold\s+for\s+)?€([\d,]+(?:\.\d{2})?)/i,
     /AED\s*([\d,]+(?:\.\d{2})?)/i,
     /([\d,]+(?:\.\d{2})?)\s*AED/i,
     /GBP\s*([\d,]+(?:\.\d{2})?)/i,
@@ -179,18 +187,19 @@ export async function POST(req: NextRequest) {
       serperImageSearch(imageQuery),
     ]);
 
-    // Asking prices — from dealers (exclude Chrono24)
+    // Asking prices — from dealers (apply all exclusions)
     const askingListings = parseResults(
       [...(dealerData.organic || [])],
-      ["chrono24.com", "chrono24.co.uk"]
+      EXCLUDED_DOMAINS
     );
 
-    // Sold prices — eBay + general sold + Chrono24 sold
+    // Sold prices — eBay + general sold + Chrono24 sold (exclude non-sold exclusions but keep Chrono24 sold)
+    const soldExclusions = EXCLUDED_DOMAINS.filter(d => !d.includes("chrono24"));
     const soldListings = parseResults([
       ...(ebayData.organic || []),
       ...(soldData.organic || []),
       ...(chrono24SoldData.organic || []),
-    ], []);
+    ], soldExclusions);
 
     // Deduplicate sold listings by URL
     const seenUrls = new Set<string>();
