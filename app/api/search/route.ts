@@ -4,93 +4,50 @@ import * as cheerio from "cheerio";
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const EBAY_APP_ID = process.env.EBAY_APP_ID;
 
-// Shopify-based dealer sites (support /search.json)
-const SHOPIFY_SITES = [
+const UAE_DOMAINS = [
+  "luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
+  "timesecret.ae", "thestore.ae", "theluxuryaddress.ae", "timezonedubai.com", "topwatches.ae",
+];
+
+const UK_DEALERS = [
   "thekettlekids.com",
-  "theluxuryaddress.ae",
-  "topwatches.ae",
-  "timesecret.ae",
-  "thestore.ae",
+  "gmgwatches.co.uk",
+  "trottersjewellers.com",
+  "prestigiousjewellers.com",
+  "watchfinder.co.uk",
+  "watchbox.com",
   "watchcollectors.co.uk",
 ];
 
-// Non-Shopify dealer sites (direct HTML scraping)
-const SCRAPE_SITES: { url: string; searchPath: string; priceSelector: string; titleSelector: string; linkSelector: string }[] = [
-  {
-    url: "https://www.gmgwatches.co.uk",
-    searchPath: "/?s=",
-    priceSelector: ".price",
-    titleSelector: ".woocommerce-loop-product__title",
-    linkSelector: "a.woocommerce-LoopProduct-link",
-  },
-  {
-    url: "https://www.trottersjewellers.com",
-    searchPath: "/search?q=",
-    priceSelector: ".price",
-    titleSelector: ".product-title",
-    linkSelector: "a.product-link",
-  },
-  {
-    url: "https://watchfinder.co.uk",
-    searchPath: "/search?q=",
-    priceSelector: "[data-price]",
-    titleSelector: ".watch-title",
-    linkSelector: "a",
-  },
+const DUBAI_DEALERS = [
+  "luxurysouq.com",
+  "chrono-group.ae",
+  "chrono-hub.com",
+  "watchmaestro.com",
+  "timesecret.ae",
+  "thestore.ae",
+  "theluxuryaddress.ae",
+  "timezonedubai.com",
+  "topwatches.ae",
 ];
 
 const EXCLUDED_DOMAINS = [
-  // Excluded platforms
-  "chrono24.com",
-  "chrono24.co.uk",
-  "instagram.com",
-  "hodinkee.com",
-  "watchcharts.com",
-  "bobswatches.com",
-  "timepiece360.com",
-  // Official brand websites
-  "rolex.com",
-  "tudorwatch.com",
-  "patekphilippe.com",
-  "audemarspiguet.com",
-  "iwc.com",
-  "breitling.com",
-  "tagheuer.com",
-  "omega.com",
-  "cartier.com",
-  "richardmille.com",
-  "hublot.com",
-  "jaegerlecoultre.com",
-  "vacheron-constantin.com",
-  "a-lange-soehne.com",
-  "panerai.com",
-  "zenith-watches.com",
-  "chopard.com",
-  "girard-perregaux.com",
-  "ulysse-nardin.com",
-  "blancpain.com",
-  "breguet.com",
-  // Authorised dealers
-  "watches-of-switzerland.co.uk",
-  "goldsmiths.co.uk",
-  "ernestjones.co.uk",
-  "mappin-webb.co.uk",
-  "fraserhart.co.uk",
-  "bucherer.com",
-  "tourneau.com",
-  "johnhardy.com",
-  "harrods.com",
-  "selfridges.com",
-  "dunhill.com",
-  // Price guides & editorial
-  "fratellowatches.com",
-  "monochrome-watches.com",
-  "ablogtowatch.com",
-  "watchtime.com",
-  "revolutionwatch.com",
-  "timeandtidewatches.com",
-  "watchpro.com",
+  "chrono24.com", "chrono24.co.uk",
+  "instagram.com", "hodinkee.com", "watchcharts.com", "bobswatches.com", "timepiece360.com",
+  "rolex.com", "tudorwatch.com", "patekphilippe.com", "audemarspiguet.com",
+  "iwc.com", "breitling.com", "tagheuer.com", "omega.com", "cartier.com",
+  "richardmille.com", "hublot.com", "jaegerlecoultre.com", "vacheron-constantin.com",
+  "a-lange-soehne.com", "panerai.com", "zenith-watches.com", "chopard.com",
+  "girard-perregaux.com", "ulysse-nardin.com", "blancpain.com", "breguet.com",
+  "watches-of-switzerland.co.uk", "goldsmiths.co.uk", "ernestjones.co.uk",
+  "mappin-webb.co.uk", "fraserhart.co.uk", "bucherer.com", "tourneau.com",
+  "harrods.com", "selfridges.com",
+  "fratellowatches.com", "monochrome-watches.com", "ablogtowatch.com",
+  "watchtime.com", "watchpro.com", "revolutionwatch.com", "timeandtidewatches.com",
+  "johnhardy.com", "dunhill.com",
 ];
+
+type Listing = { title: string; price: number; currency: string; url: string; source: string };
 
 function extractPrice(text: string): number | null {
   const patterns = [
@@ -107,13 +64,13 @@ function extractPrice(text: string): number | null {
     const match = text.match(pattern);
     if (match) {
       const value = parseFloat(match[1].replace(/,/g, ""));
-      if (value > 500 && value < 5000000) return value;
+      if (value > 500 && value < 5_000_000) return value;
     }
   }
   return null;
 }
 
-function detectCurrency(text: string, defaultCurrency = "USD"): string {
+function detectCurrency(text: string, defaultCurrency = "GBP"): string {
   if (text.includes("£") || /\bGBP\b/i.test(text)) return "GBP";
   if (/\bAED\b/i.test(text) || text.includes("د.إ")) return "AED";
   if (text.includes("€") || /\bEUR\b/i.test(text)) return "EUR";
@@ -128,7 +85,7 @@ function dominantCurrency(listings: { currency: string }[]) {
 }
 
 // ── eBay completed/sold listings ──────────────────────────────────────────────
-async function searchEbaySold(query: string) {
+async function searchEbaySold(query: string): Promise<Listing[]> {
   if (!EBAY_APP_ID) return [];
   try {
     const params = new URLSearchParams({
@@ -142,7 +99,6 @@ async function searchEbaySold(query: string) {
       "sortOrder": "EndTimeSoonest",
       "paginationInput.entriesPerPage": "20",
     });
-
     const res = await fetch(
       `https://svcs.ebay.com/services/search/FindingService/v1?${params}`,
       { next: { revalidate: 0 } }
@@ -150,121 +106,196 @@ async function searchEbaySold(query: string) {
     if (!res.ok) return [];
     const data = await res.json();
     const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
-
     return items
-      .filter((item: Record<string, unknown[]>) => (item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] === "EndedWithSales")
+      .filter((item: Record<string, unknown[]>) =>
+        (item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] === "EndedWithSales"
+      )
       .map((item: Record<string, unknown[]>) => {
         const priceObj = item.sellingStatus?.[0] as Record<string, unknown[]>;
         const priceStr = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.__value__ || "";
-        const currencyId = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.["@currencyId"] || "USD";
+        const currencyId = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.["@currencyId"] || "GBP";
         const price = parseFloat(priceStr);
         if (!price || price < 500) return null;
-
         const currencyMap: Record<string, string> = { GBP: "GBP", USD: "USD", EUR: "EUR" };
         return {
           title: (item.title?.[0] as string) || "",
           price,
-          currency: currencyMap[currencyId] || "USD",
+          currency: currencyMap[currencyId] || "GBP",
           url: (item.viewItemURL?.[0] as string) || "",
           source: "ebay.co.uk",
         };
       })
-      .filter(Boolean);
+      .filter(Boolean) as Listing[];
   } catch {
     return [];
   }
 }
 
-const UAE_DOMAINS = ["luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
-  "timesecret.ae", "thestore.ae", "theluxuryaddress.ae", "timezonedubai.com", "topwatches.ae"];
-
-// ── Shopify JSON search ───────────────────────────────────────────────────────
-async function searchShopifySite(domain: string, query: string) {
-  const defaultCurrency = UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
+// ── Scrape a product page for its price via JSON-LD → meta tags → CSS ────────
+async function scrapeProductPage(
+  url: string,
+  domain: string,
+  defaultCurrency: string
+): Promise<{ price: number; currency: string } | null> {
   try {
-    const res = await fetch(
-      `https://${domain}/search?type=product&q=${encodeURIComponent(query)}`,
-      { headers: { Accept: "text/html" }, next: { revalidate: 0 } }
-    );
-    if (!res.ok) return [];
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(7000),
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return null;
     const html = await res.text();
     const $ = cheerio.load(html);
-    const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
 
-    $("[data-price], .price, .product-price, .money").each((_, el) => {
-      const priceText = $(el).text().trim();
-      const price = extractPrice(priceText);
-      if (!price) return;
-
-      const productEl = $(el).closest("a, [href]").first();
-      const href = productEl.attr("href") || "";
-      const title = productEl.attr("title") || productEl.find("h2,h3,.title,.product-title").first().text().trim() || priceText;
-
-      if (price) {
-        listings.push({
-          title,
-          price,
-          currency: detectCurrency(priceText, defaultCurrency),
-          url: href.startsWith("http") ? href : `https://${domain}${href}`,
-          source: domain,
-        });
-      }
+    // 1. JSON-LD structured data (most reliable — standard for ecommerce)
+    let found: { price: number; currency: string } | null = null;
+    $("script[type='application/ld+json']").each((_, el) => {
+      if (found) return;
+      try {
+        const raw = $(el).html() || "{}";
+        const json = JSON.parse(raw);
+        const nodes: unknown[] = Array.isArray(json) ? json : [json];
+        for (const node of nodes) {
+          const n = node as Record<string, unknown>;
+          if (n["@type"] !== "Product") continue;
+          const offers = n.offers || n.offer;
+          if (!offers) continue;
+          const offer = (Array.isArray(offers) ? offers[0] : offers) as Record<string, unknown>;
+          const price = parseFloat(String(offer.price ?? ""));
+          if (price > 500 && price < 5_000_000) {
+            found = { price, currency: (offer.priceCurrency as string) || defaultCurrency };
+            return false;
+          }
+        }
+      } catch { /* malformed JSON-LD */ }
     });
+    if (found) return found;
 
-    return listings.slice(0, 5);
+    // 2. Open Graph / product meta tags
+    const metaPrice =
+      $("meta[property='product:price:amount']").attr("content") ||
+      $("meta[property='og:price:amount']").attr("content");
+    const metaCurrency =
+      $("meta[property='product:price:currency']").attr("content") ||
+      $("meta[property='og:price:currency']").attr("content") ||
+      defaultCurrency;
+    if (metaPrice) {
+      const price = parseFloat(metaPrice.replace(/,/g, ""));
+      if (price > 500 && price < 5_000_000) return { price, currency: metaCurrency };
+    }
+
+    // 3. CSS selectors — broad net of common ecommerce patterns
+    const selectors = [
+      ".price__current", ".price-item--sale", ".price-item--regular",
+      ".woocommerce-Price-amount", "[data-product-price]",
+      ".price .amount", ".product__price", ".product-price__amount",
+      ".ProductMeta__Price", ".price", ".money",
+    ];
+    for (const sel of selectors) {
+      const text = $(sel).first().text().trim();
+      const price = extractPrice(text);
+      if (price) return { price, currency: detectCurrency(text, defaultCurrency) };
+    }
+
+    return null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-// ── Serper fallback for sites that block scraping ─────────────────────────────
-async function serperSiteSearch(query: string, sites: string[]) {
+// ── Serper search targeting specific dealer sites ─────────────────────────────
+// Groups sites in 3s to keep queries targeted while limiting API calls.
+async function serperDealerSearch(
+  query: string,
+  sites: string[],
+  isUAE = false
+): Promise<Listing[]> {
   if (!SERPER_API_KEY || sites.length === 0) return [];
-  try {
-    const siteStr = sites.map((s) => `site:${s}`).join(" OR ");
-    const res = await fetch("https://google.serper.dev/search", {
-      method: "POST",
-      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: `${query} for sale price (${siteStr})`, num: 10 }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.organic || []).map((r: { title: string; snippet?: string; link: string }) => {
+
+  const groups: string[][] = [];
+  for (let i = 0; i < sites.length; i += 3) groups.push(sites.slice(i, i + 3));
+
+  const serperResults = await Promise.all(
+    groups.map(async (group) => {
+      const siteStr = group.map((s) => `site:${s}`).join(" OR ");
       try {
-        const domain = new URL(r.link).hostname.replace("www.", "");
-        if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) return null;
-        const fullText = `${r.title} ${r.snippet || ""}`;
-        const price = extractPrice(fullText);
-        if (!price) return null;
-        const defaultCurrency = UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
-        return { title: r.title, price, currency: detectCurrency(fullText, defaultCurrency), url: r.link, source: domain };
-      } catch { return null; }
-    }).filter(Boolean);
-  } catch {
-    return [];
+        const res = await fetch("https://google.serper.dev/search", {
+          method: "POST",
+          headers: { "X-API-KEY": SERPER_API_KEY!, "Content-Type": "application/json" },
+          body: JSON.stringify({ q: `${query} ${siteStr}`, num: 10 }),
+        });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return (data.organic || []) as { title: string; snippet?: string; link: string }[];
+      } catch { return []; }
+    })
+  );
+
+  const listings: Listing[] = [];
+  const pagePromises: Promise<void>[] = [];
+
+  for (const r of serperResults.flat()) {
+    let domain: string;
+    try { domain = new URL(r.link).hostname.replace("www.", ""); }
+    catch { continue; }
+    if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) continue;
+
+    const defaultCurrency = isUAE || UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
+    const fullText = `${r.title} ${r.snippet || ""}`;
+    const snippetPrice = extractPrice(fullText);
+
+    if (snippetPrice) {
+      listings.push({
+        title: r.title,
+        price: snippetPrice,
+        currency: detectCurrency(fullText, defaultCurrency),
+        url: r.link,
+        source: domain,
+      });
+    } else {
+      // Price not in snippet — scrape the actual product page
+      const url = r.link;
+      const title = r.title;
+      pagePromises.push(
+        scrapeProductPage(url, domain, defaultCurrency).then((priceData) => {
+          if (priceData) {
+            listings.push({ title, price: priceData.price, currency: priceData.currency, url, source: domain });
+          }
+        })
+      );
+    }
   }
+
+  await Promise.all(pagePromises);
+  return listings;
 }
 
 // ── Serper for Chrono24 sold prices ──────────────────────────────────────────
-async function serperChrono24Sold(query: string) {
+async function serperChrono24Sold(query: string): Promise<Listing[]> {
   if (!SERPER_API_KEY) return [];
   try {
     const res = await fetch("https://google.serper.dev/search", {
       method: "POST",
       headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: `${query} sold price site:chrono24.com OR site:chrono24.co.uk`, num: 10 }),
+      body: JSON.stringify({
+        q: `${query} sold price site:chrono24.com OR site:chrono24.co.uk`,
+        num: 10,
+      }),
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.organic || []).map((r: { title: string; snippet?: string; link: string }) => {
-      const fullText = `${r.title} ${r.snippet || ""}`;
-      const price = extractPrice(fullText);
-      if (!price) return null;
-      return { title: r.title, price, currency: detectCurrency(fullText), url: r.link, source: "chrono24.com" };
-    }).filter(Boolean);
-  } catch {
-    return [];
-  }
+    return (data.organic || [])
+      .map((r: { title: string; snippet?: string; link: string }) => {
+        const fullText = `${r.title} ${r.snippet || ""}`;
+        const price = extractPrice(fullText);
+        if (!price) return null;
+        return { title: r.title, price, currency: detectCurrency(fullText, "GBP"), url: r.link, source: "chrono24.com" };
+      })
+      .filter(Boolean) as Listing[];
+  } catch { return []; }
 }
 
 // ── Image search ──────────────────────────────────────────────────────────────
@@ -283,9 +314,7 @@ async function getWatchImage(query: string): Promise<string | null> {
       if (img.imageUrl && img.imageWidth > 200 && img.imageHeight > 200) return img.imageUrl;
     }
     return images[0]?.imageUrl || null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -307,81 +336,23 @@ export async function POST(req: NextRequest) {
 
   const imageQuery = `${make || ""} ${model || ""} ${reference} ${variantTerms} watch`.trim().replace(/\s+/g, " ");
 
-  // Dubai sites — use Serper since they're harder to scrape
-  const DUBAI_SITES = [
-    "luxurysouq.com", "chrono-group.ae", "chrono-hub.com", "watchmaestro.com",
-    "timepiece360.com", "timesecret.ae", "thestore.ae", "theluxuryaddress.ae",
-    "timezonedubai.com", "topwatches.ae",
-  ];
-
-  // Non-Shopify UK sites — use Serper as fallback
-  const UK_SERPER_SITES = [
-    "prestigiousjewellers.com", "watchfinder.co.uk", "watchbox.com", "crownandcaliber.com",
-  ];
-
-  const [
-    ebayResults,
-    chrono24Results,
-    shopifyResults,
-    dubaiResults,
-    ukSerperResults,
-    watchImage,
-  ] = await Promise.all([
+  const [ukResults, dubaiResults, ebayResults, chrono24Results, watchImage] = await Promise.all([
+    serperDealerSearch(baseQuery, UK_DEALERS, false),
+    serperDealerSearch(baseQuery, DUBAI_DEALERS, true),
     searchEbaySold(baseQuery),
     serperChrono24Sold(baseQuery),
-    Promise.all(SHOPIFY_SITES.map((site) => searchShopifySite(site, `${make || ""} ${model || ""} ${reference}`.trim()))).then((r) => r.flat()),
-    serperSiteSearch(baseQuery, DUBAI_SITES),
-    serperSiteSearch(baseQuery, UK_SERPER_SITES),
     getWatchImage(imageQuery),
   ]);
 
-  // Also scrape the non-Shopify UK sites directly
-  const directScrapeResults = await Promise.all(
-    SCRAPE_SITES.map(async (site) => {
-      try {
-        const res = await fetch(`${site.url}${site.searchPath}${encodeURIComponent(`${reference}`)}`, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; WatchPricer/1.0)" },
-          next: { revalidate: 0 },
-        });
-        if (!res.ok) return [];
-        const html = await res.text();
-        const $ = cheerio.load(html);
-        const listings: { title: string; price: number; currency: string; url: string; source: string }[] = [];
-        $(site.priceSelector).each((_, el) => {
-          const priceText = $(el).text().trim();
-          const price = extractPrice(priceText);
-          if (!price) return;
-          const parent = $(el).closest("li, article, .product, [class*='product']");
-          const title = parent.find(site.titleSelector).text().trim() || reference;
-          const href = parent.find(site.linkSelector).attr("href") || "";
-          listings.push({
-            title, price,
-            currency: detectCurrency(priceText),
-            url: href.startsWith("http") ? href : `${site.url}${href}`,
-            source: new URL(site.url).hostname.replace("www.", ""),
-          });
-        });
-        return listings.slice(0, 5);
-      } catch { return []; }
-    })
-  ).then((r) => r.flat());
+  const askingListings = [...ukResults, ...dubaiResults].filter(
+    (l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d))
+  );
 
-  // Combine asking prices
-  const askingListings = [
-    ...shopifyResults,
-    ...dubaiResults,
-    ...ukSerperResults,
-    ...directScrapeResults,
-  ].filter((l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d)));
+  const soldListings = [...ebayResults, ...chrono24Results].filter(
+    (l) => !EXCLUDED_DOMAINS.filter((d) => !d.includes("chrono24")).some((d) => l.source.includes(d))
+  );
 
-  // Combine sold prices
-  const soldListings = [
-    ...ebayResults,
-    ...chrono24Results,
-  ].filter((l) => !EXCLUDED_DOMAINS.filter(d => !d.includes("chrono24")).some((d) => l.source.includes(d)));
-
-  // Deduplicate by URL
-  const dedup = (arr: typeof askingListings) => {
+  const dedup = (arr: Listing[]) => {
     const seen = new Set<string>();
     return arr.filter((l) => { if (seen.has(l.url)) return false; seen.add(l.url); return true; });
   };
