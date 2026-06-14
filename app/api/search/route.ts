@@ -40,6 +40,7 @@ const SCRAPE_SITES: { url: string; searchPath: string; priceSelector: string; ti
 ];
 
 const EXCLUDED_DOMAINS = [
+  // Excluded platforms
   "chrono24.com",
   "chrono24.co.uk",
   "instagram.com",
@@ -47,6 +48,48 @@ const EXCLUDED_DOMAINS = [
   "watchcharts.com",
   "bobswatches.com",
   "timepiece360.com",
+  // Official brand websites
+  "rolex.com",
+  "tudorwatch.com",
+  "patekphilippe.com",
+  "audemarspiguet.com",
+  "iwc.com",
+  "breitling.com",
+  "tagheuer.com",
+  "omega.com",
+  "cartier.com",
+  "richardmille.com",
+  "hublot.com",
+  "jaegerlecoultre.com",
+  "vacheron-constantin.com",
+  "a-lange-soehne.com",
+  "panerai.com",
+  "zenith-watches.com",
+  "chopard.com",
+  "girard-perregaux.com",
+  "ulysse-nardin.com",
+  "blancpain.com",
+  "breguet.com",
+  // Authorised dealers
+  "watches-of-switzerland.co.uk",
+  "goldsmiths.co.uk",
+  "ernestjones.co.uk",
+  "mappin-webb.co.uk",
+  "fraserhart.co.uk",
+  "bucherer.com",
+  "tourneau.com",
+  "johnhardy.com",
+  "harrods.com",
+  "selfridges.com",
+  "dunhill.com",
+  // Price guides & editorial
+  "fratellowatches.com",
+  "monochrome-watches.com",
+  "ablogtowatch.com",
+  "watchtime.com",
+  "revolutionwatch.com",
+  "timeandtidewatches.com",
+  "watchpro.com",
 ];
 
 function extractPrice(text: string): number | null {
