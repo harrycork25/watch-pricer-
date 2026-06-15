@@ -44,6 +44,7 @@ interface HistoryEntry {
   bracelet: string;
   photo: string | null;
   watchImage: string | null;
+  lowestAsking: number | null;
   highestSold: number | null;
   lowestSold: number | null;
   currency: string;
@@ -144,6 +145,9 @@ function HistoryCard({ entry, onRestore, onDelete }: {
               {[entry.year, entry.condition, entry.material !== "any" ? entry.material : "", entry.dialColour !== "any" ? entry.dialColour : "", entry.bracelet !== "any" ? entry.bracelet : ""].filter(Boolean).join(" · ")}
             </p>
             <div className="flex gap-3 mt-2">
+              {entry.lowestAsking && (
+                <span className="text-xs text-gray-400">Ask: <span className="text-white">{symbol}{entry.lowestAsking.toLocaleString()}</span></span>
+              )}
               {entry.lowestSold && (
                 <span className="text-xs text-gray-400">Sold: <span className="text-white">{symbol}{entry.lowestSold.toLocaleString()}{entry.highestSold && entry.highestSold !== entry.lowestSold ? `–${entry.highestSold.toLocaleString()}` : ""}</span></span>
               )}
@@ -210,6 +214,7 @@ export default function Home() {
       material, dialColour, bracelet,
       photo,
       watchImage: data.watchImage || null,
+      lowestAsking: data.asking.listings.length > 0 ? data.asking.listings[0].price : null,
       highestSold: data.sold.listings.length > 0 ? data.sold.listings[data.sold.listings.length - 1].price : null,
       lowestSold: data.sold.listings.length > 0 ? data.sold.listings[0].price : null,
       currency: data.sold.currency || "GBP",
@@ -398,10 +403,23 @@ export default function Home() {
               </div>
             )}
 
-            {!result.error && result.sold.listings.length === 0 && (
+            {!result.error && result.asking.listings.length === 0 && result.sold.listings.length === 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-400 text-sm">
-                No sold listings found. Try adjusting the reference number or removing the year.
+                No listings found. Try adjusting the reference number or removing the year.
               </div>
+            )}
+
+            {result.asking.listings.length > 0 && (
+              <>
+                <div className="grid grid-cols-1 gap-3 mb-8">
+                  <StatCard label="Lowest Asking Price"
+                    price={result.asking.listings[0].price}
+                    fromCurrency={result.asking.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
+                    url={result.asking.listings[0].url}
+                    source={result.asking.listings[0].source} />
+                </div>
+                <ListingsBlock group={result.asking} label="All Asking Prices" displayCurrency={displayCurrency} convertPrice={convertPrice} />
+              </>
             )}
 
             {result.sold.listings.length > 0 && (

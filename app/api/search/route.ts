@@ -305,25 +305,44 @@ async function serperDealerSearch(
 }
 
 // ── Serper for Chrono24 sold prices ──────────────────────────────────────────
-async function serperChrono24Sold(query: string): Promise<Listing[]> {
+async function serperChrono24Sold(query: string, condition: string, year: string): Promise<Listing[]> {
   if (!SERPER_API_KEY) return [];
   try {
     const res = await fetch("https://google.serper.dev/search", {
       method: "POST",
       headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        q: `${query} sold price site:chrono24.com OR site:chrono24.co.uk`,
+        q: `${query} sold site:chrono24.com OR site:chrono24.co.uk`,
         num: 10,
       }),
     });
     if (!res.ok) return [];
     const data = await res.json();
+
+    // Words that indicate a new/unworn watch — reject if user searched "used"
+    const newTerms = ["unworn", "brand new", "new watch", "never worn", "sealed"];
+    // Words that indicate pre-owned — reject if user searched "new"
+    const usedTerms = ["pre-owned", "preowned", "used", "second hand", "secondhand"];
+
     return (data.organic || [])
       .map((r: { title: string; snippet?: string; link: string }) => {
-        const fullText = `${r.title} ${r.snippet || ""}`;
-        const price = extractPrice(fullText);
+        const fullText = `${r.title} ${r.snippet || ""}`.toLowerCase();
+        const price = extractPrice(`${r.title} ${r.snippet || ""}`);
         if (!price) return null;
-        return { title: r.title, price, currency: detectCurrency(fullText, "GBP"), url: r.link, source: "chrono24.com", soldDate: extractDate(fullText) };
+
+        // Condition filter
+        if (condition === "used" && newTerms.some((t) => fullText.includes(t))) return null;
+        if (condition === "new" && usedTerms.some((t) => fullText.includes(t))) return null;
+
+        // Year filter — if a year is specified and a different year appears prominently, skip
+        if (year) {
+          const yearNum = parseInt(year);
+          const yearsInText = [...fullText.matchAll(/\b(20\d{2})\b/g)].map((m) => parseInt(m[1]));
+          if (yearsInText.length > 0 && !yearsInText.some((y) => Math.abs(y - yearNum) <= 1)) return null;
+        }
+
+        const raw = `${r.title} ${r.snippet || ""}`;
+        return { title: r.title, price, currency: detectCurrency(raw, "GBP"), url: r.link, source: "chrono24.com", soldDate: extractDate(raw) };
       })
       .filter(Boolean) as Listing[];
   } catch { return []; }
@@ -378,7 +397,7 @@ export async function POST(req: NextRequest) {
     serperDealerSearch(baseQuery, UK_DEALERS, false),
     serperDealerSearch(baseQuery, DUBAI_DEALERS, true),
     searchEbaySold(ebayQuery, reference),
-    serperChrono24Sold(baseQuery),
+    serperChrono24Sold(baseQuery, condition, year || ""),
     getWatchImage(imageQuery),
   ]);
 
