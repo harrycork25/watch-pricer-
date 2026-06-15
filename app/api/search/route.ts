@@ -63,7 +63,7 @@ function extractPrice(text: string): number | null {
     const match = text.match(pattern);
     if (match) {
       const value = parseFloat(match[1].replace(/,/g, ""));
-      if (value > 500 && value < 5_000_000) return value;
+      if (value > 1000 && value < 5_000_000) return value;
     }
   }
   return null;
@@ -292,6 +292,8 @@ async function serperDealerSearch(
     let domain: string;
     try { domain = new URL(r.link).hostname.replace("www.", ""); }
     catch { continue; }
+    // Only accept results from the sites we actually searched — blocks strays like prwe.com
+    if (!sites.some((s) => domain.includes(s) || s.includes(domain))) continue;
     if (EXCLUDED_DOMAINS.some((d) => domain.includes(d))) continue;
 
     const defaultCurrency = isUAE || UAE_DOMAINS.some((d) => domain.includes(d)) ? "AED" : "GBP";
