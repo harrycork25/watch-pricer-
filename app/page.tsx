@@ -7,6 +7,62 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: "£", USD: "$", EUR: "€", AED: "AED ",
 };
 
+interface NicknameEntry { nickname: string; make: string; model: string; reference: string; material?: string; dial?: string; bracelet?: string }
+
+const WATCH_NICKNAMES: NicknameEntry[] = [
+  // ── Rolex Submariner ──────────────────────────────────────────────────────
+  { nickname: "Hulk",           make: "Rolex", model: "Submariner Date", reference: "116610LV", material: "Steel", dial: "Green" },
+  { nickname: "Starbucks",      make: "Rolex", model: "Submariner Date", reference: "126610LV", material: "Steel", dial: "Green" },
+  { nickname: "Kermit",         make: "Rolex", model: "Submariner Date", reference: "16610LV",  material: "Steel", dial: "Green" },
+  { nickname: "Black Sub",      make: "Rolex", model: "Submariner",      reference: "124060",   material: "Steel", dial: "Black" },
+  { nickname: "Smurf",          make: "Rolex", model: "Submariner Date", reference: "116619LB", material: "White Gold", dial: "Blue" },
+  { nickname: "Bluesy",         make: "Rolex", model: "Submariner Date", reference: "126613LB", material: "Rolesor", dial: "Blue" },
+  // ── Rolex GMT ─────────────────────────────────────────────────────────────
+  { nickname: "Batman",         make: "Rolex", model: "GMT-Master II",   reference: "126710BLNR", material: "Steel", dial: "Black", bracelet: "Jubilee" },
+  { nickname: "Pepsi",          make: "Rolex", model: "GMT-Master II",   reference: "126710BLRO", material: "Steel", dial: "Black", bracelet: "Jubilee" },
+  { nickname: "Sprite",         make: "Rolex", model: "GMT-Master II",   reference: "126720VTNR", material: "Steel", dial: "Black" },
+  { nickname: "Coke",           make: "Rolex", model: "GMT-Master II",   reference: "16710",      material: "Steel", dial: "Black" },
+  { nickname: "Root Beer",      make: "Rolex", model: "GMT-Master II",   reference: "126711CHNR", material: "Rolesor", dial: "Black" },
+  { nickname: "Rootbeer",       make: "Rolex", model: "GMT-Master II",   reference: "126711CHNR", material: "Rolesor", dial: "Black" },
+  // ── Rolex Daytona ─────────────────────────────────────────────────────────
+  { nickname: "Panda",          make: "Rolex", model: "Daytona",         reference: "116500LN", material: "Steel", dial: "White" },
+  { nickname: "Reverse Panda",  make: "Rolex", model: "Daytona",         reference: "116500LN", material: "Steel", dial: "Black" },
+  { nickname: "Paul Newman",    make: "Rolex", model: "Daytona",         reference: "6239",     dial: "Exotic" },
+  { nickname: "Rainbow",        make: "Rolex", model: "Daytona",         reference: "116595RBOW" },
+  // ── Rolex other ───────────────────────────────────────────────────────────
+  { nickname: "Wimbledon",      make: "Rolex", model: "Datejust 41",     reference: "126334",   material: "Steel", dial: "Grey" },
+  { nickname: "Deepsea",        make: "Rolex", model: "Sea-Dweller Deepsea", reference: "126660", material: "Steel", dial: "Black" },
+  { nickname: "Deepsea D-Blue", make: "Rolex", model: "Sea-Dweller Deepsea", reference: "116660", material: "Steel", dial: "D-Blue" },
+  { nickname: "Milgauss",       make: "Rolex", model: "Milgauss",        reference: "116400GV", material: "Steel", dial: "Green" },
+  { nickname: "Polar",          make: "Rolex", model: "Explorer II",     reference: "216570",   material: "Steel", dial: "White" },
+  // ── Patek Philippe ────────────────────────────────────────────────────────
+  { nickname: "Nautilus",       make: "Patek Philippe", model: "Nautilus", reference: "5711/1A-010", material: "Steel", dial: "Blue" },
+  { nickname: "Nautilus Tiffany", make: "Patek Philippe", model: "Nautilus", reference: "5711/1A-018", material: "Steel", dial: "Tiffany Blue" },
+  { nickname: "Aquanaut",       make: "Patek Philippe", model: "Aquanaut", reference: "5167A-001", material: "Steel", dial: "Black" },
+  // ── Audemars Piguet ───────────────────────────────────────────────────────
+  { nickname: "Royal Oak Jumbo", make: "Audemars Piguet", model: "Royal Oak", reference: "15202ST", material: "Steel", dial: "Blue" },
+  { nickname: "Royal Oak",      make: "Audemars Piguet", model: "Royal Oak", reference: "15500ST", material: "Steel", dial: "Blue" },
+  { nickname: "ROO",            make: "Audemars Piguet", model: "Royal Oak Offshore", reference: "26400SO" },
+  // ── Tudor ─────────────────────────────────────────────────────────────────
+  { nickname: "Black Bay 58",   make: "Tudor", model: "Black Bay 58",    reference: "M79030N-0001", material: "Steel", dial: "Black" },
+  { nickname: "BB58",           make: "Tudor", model: "Black Bay 58",    reference: "M79030N-0001", material: "Steel", dial: "Black" },
+  { nickname: "Black Bay",      make: "Tudor", model: "Black Bay",       reference: "M79730-0007",  material: "Steel", dial: "Black" },
+  { nickname: "Pelagos",        make: "Tudor", model: "Pelagos",         reference: "M25600TN-0001", material: "Titanium", dial: "Blue" },
+  // ── Omega ─────────────────────────────────────────────────────────────────
+  { nickname: "Moonwatch",      make: "Omega", model: "Speedmaster Professional", reference: "311.30.42.30.01.005", material: "Steel", dial: "Black" },
+  { nickname: "Speedy",         make: "Omega", model: "Speedmaster Professional", reference: "311.30.42.30.01.005", material: "Steel", dial: "Black" },
+  { nickname: "Aqua Terra",     make: "Omega", model: "Seamaster Aqua Terra", reference: "220.10.41.21.03.004" },
+  // ── IWC ───────────────────────────────────────────────────────────────────
+  { nickname: "Big Pilot",      make: "IWC", model: "Big Pilot",         reference: "IW501001", material: "Steel", dial: "Black" },
+  { nickname: "Portugieser",    make: "IWC", model: "Portugieser",       reference: "IW500710" },
+  // ── Hublot ────────────────────────────────────────────────────────────────
+  { nickname: "Big Bang",       make: "Hublot", model: "Big Bang",       reference: "301.CI.1770.RX" },
+  { nickname: "Classic Fusion", make: "Hublot", model: "Classic Fusion", reference: "542.NX.1170.RX" },
+  // ── Richard Mille ─────────────────────────────────────────────────────────
+  { nickname: "RM11",           make: "Richard Mille", model: "RM 11-03", reference: "RM11-03" },
+  { nickname: "RM35",           make: "Richard Mille", model: "RM 35-02", reference: "RM35-02" },
+];
+
 const CURRENCIES = ["GBP", "AED", "USD"] as const;
 type Currency = typeof CURRENCIES[number];
 
@@ -169,6 +225,8 @@ function HistoryCard({ entry, onRestore, onDelete }: {
 }
 
 export default function Home() {
+  const [nicknameQuery, setNicknameQuery] = useState("");
+  const [nicknameSuggestions, setNicknameSuggestions] = useState<NicknameEntry[]>([]);
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [reference, setReference] = useState("");
@@ -275,6 +333,26 @@ export default function Home() {
     }
   };
 
+  const handleNicknameInput = (val: string) => {
+    setNicknameQuery(val);
+    if (!val.trim()) { setNicknameSuggestions([]); return; }
+    const q = val.toLowerCase();
+    setNicknameSuggestions(
+      WATCH_NICKNAMES.filter((n) => n.nickname.toLowerCase().includes(q)).slice(0, 5)
+    );
+  };
+
+  const applyNickname = (entry: NicknameEntry) => {
+    setMake(entry.make);
+    setModel(entry.model);
+    setReference(entry.reference);
+    if (entry.material) setMaterial(entry.material);
+    if (entry.dial) setDialColour(entry.dial);
+    if (entry.bracelet) setBracelet(entry.bracelet);
+    setNicknameQuery("");
+    setNicknameSuggestions([]);
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-2xl mx-auto px-4 py-10">
@@ -292,6 +370,28 @@ export default function Home() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Nickname quick-fill */}
+        <div className="relative mb-4">
+          <input
+            type="text"
+            value={nicknameQuery}
+            onChange={(e) => handleNicknameInput(e.target.value)}
+            placeholder='Search by nickname — "Hulk", "Batman", "Pepsi"…'
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-400 text-sm"
+          />
+          {nicknameSuggestions.length > 0 && (
+            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden shadow-xl">
+              {nicknameSuggestions.map((s) => (
+                <button key={s.nickname + s.reference} onClick={() => applyNickname(s)}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors border-b border-gray-800 last:border-0">
+                  <span className="text-white text-sm font-medium">{s.nickname}</span>
+                  <span className="text-gray-400 text-xs ml-2">{s.make} {s.model} · {s.reference}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
