@@ -47,7 +47,7 @@ const EXCLUDED_DOMAINS = [
   "johnhardy.com", "dunhill.com",
 ];
 
-type Listing = { title: string; price: number; currency: string; url: string; source: string };
+type Listing = { title: string; price: number; currency: string; url: string; source: string; soldDate?: string };
 
 function extractPrice(text: string): number | null {
   const patterns = [
@@ -117,12 +117,17 @@ async function searchEbaySold(query: string): Promise<Listing[]> {
         const price = parseFloat(priceStr);
         if (!price || price < 500) return null;
         const currencyMap: Record<string, string> = { GBP: "GBP", USD: "USD", EUR: "EUR" };
+        const endTimeRaw = (item.listingInfo?.[0] as Record<string, unknown[]>)?.endTime?.[0] as string | undefined;
+        const soldDate = endTimeRaw
+          ? new Date(endTimeRaw).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+          : undefined;
         return {
           title: (item.title?.[0] as string) || "",
           price,
           currency: currencyMap[currencyId] || "GBP",
           url: (item.viewItemURL?.[0] as string) || "",
           source: "ebay.co.uk",
+          soldDate,
         };
       })
       .filter(Boolean) as Listing[];

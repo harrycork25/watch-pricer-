@@ -16,6 +16,7 @@ interface Listing {
   currency: string;
   url: string;
   source: string;
+  soldDate?: string;
 }
 
 interface PriceGroup {
@@ -94,7 +95,10 @@ function ListingsBlock({ group, label, displayCurrency, convertPrice }: {
             className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors">
             <div className="flex-1 min-w-0 mr-4">
               <p className="text-sm text-white truncate">{listing.title}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{listing.source}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {listing.source}
+                {listing.soldDate && <span className="ml-2 text-gray-600">· {listing.soldDate}</span>}
+              </p>
             </div>
             <p className="text-sm font-semibold text-white flex-shrink-0">
               {symbol}{convertPrice(listing.price, listing.currency).toLocaleString()}
