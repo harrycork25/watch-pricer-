@@ -45,7 +45,6 @@ interface HistoryEntry {
   photo: string | null;
   watchImage: string | null;
   lowestAsking: number | null;
-  highestSold: number | null;
   lowestSold: number | null;
   currency: string;
 }
@@ -149,7 +148,7 @@ function HistoryCard({ entry, onRestore, onDelete }: {
                 <span className="text-xs text-gray-400">Ask: <span className="text-white">{symbol}{entry.lowestAsking.toLocaleString()}</span></span>
               )}
               {entry.lowestSold && (
-                <span className="text-xs text-gray-400">Sold: <span className="text-white">{symbol}{entry.lowestSold.toLocaleString()}{entry.highestSold && entry.highestSold !== entry.lowestSold ? `–${entry.highestSold.toLocaleString()}` : ""}</span></span>
+                <span className="text-xs text-gray-400">Sold: <span className="text-white">{symbol}{entry.lowestSold.toLocaleString()}</span></span>
               )}
             </div>
           </div>
@@ -215,7 +214,6 @@ export default function Home() {
       photo,
       watchImage: data.watchImage || null,
       lowestAsking: data.asking.listings.length > 0 ? data.asking.listings[0].price : null,
-      highestSold: data.sold.listings.length > 0 ? data.sold.listings[data.sold.listings.length - 1].price : null,
       lowestSold: data.sold.listings.length > 0 ? data.sold.listings[0].price : null,
       currency: data.sold.currency || "GBP",
     };
@@ -425,11 +423,6 @@ export default function Home() {
             {result.sold.listings.length > 0 && (
               <>
                 <div className="grid grid-cols-1 gap-3 mb-8">
-                  <StatCard label="Highest Sold Price"
-                    price={result.sold.listings[result.sold.listings.length - 1].price}
-                    fromCurrency={result.sold.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
-                    url={result.sold.listings[result.sold.listings.length - 1].url}
-                    source={result.sold.listings[result.sold.listings.length - 1].source} />
                   <StatCard label="Lowest Sold Price"
                     price={result.sold.listings[0].price}
                     fromCurrency={result.sold.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
