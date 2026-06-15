@@ -46,7 +46,7 @@ const EXCLUDED_DOMAINS = [
   "johnhardy.com", "dunhill.com", "watchbox.com", "watchguys.com", "crownandcaliber.com",
 ];
 
-type Listing = { title: string; price: number; currency: string; url: string; source: string; soldDate?: string };
+type Listing = { title: string; price: number; currency: string; url: string; source: string; soldDate?: string; soldTimestamp?: number };
 
 function extractPrice(text: string): number | null {
   const patterns = [
@@ -107,7 +107,17 @@ function dominantCurrency(listings: { currency: string }[]) {
 }
 
 // ── eBay completed/sold listings ──────────────────────────────────────────────
-async function searchEbaySold(query: string, reference: string): Promise<Listing[]> {
+const EBAY_MARKETS = [
+  { globalId: "EBAY-GB", source: "ebay.co.uk", currency: "GBP" },
+  { globalId: "EBAY-US", source: "ebay.com",   currency: "USD" },
+  { globalId: "EBAY-DE", source: "ebay.de",    currency: "EUR" },
+];
+
+async function searchEbayMarket(
+  query: string,
+  reference: string,
+  market: typeof EBAY_MARKETS[number]
+): Promise<Listing[]> {
   if (!EBAY_APP_ID) return [];
   try {
     const params = new URLSearchParams({
@@ -123,7 +133,10 @@ async function searchEbaySold(query: string, reference: string): Promise<Listing
     });
     const res = await fetch(
       `https://svcs.ebay.com/services/search/FindingService/v1?${params}`,
-      { next: { revalidate: 0 } }
+      {
+        headers: { "X-EBAY-SOA-GLOBAL-ID": market.globalId },
+        next: { revalidate: 0 },
+      }
     );
     if (!res.ok) return [];
     const data = await res.json();
@@ -131,34 +144,42 @@ async function searchEbaySold(query: string, reference: string): Promise<Listing
     return items
       .filter((item: Record<string, unknown[]>) => {
         if ((item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] !== "EndedWithSales") return false;
-        // Must contain the exact reference number in the title
         const title = ((item.title?.[0] as string) || "").toLowerCase();
         return title.includes(reference.toLowerCase());
       })
       .map((item: Record<string, unknown[]>) => {
         const priceObj = item.sellingStatus?.[0] as Record<string, unknown[]>;
         const priceStr = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.__value__ || "";
-        const currencyId = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.["@currencyId"] || "GBP";
+        const currencyId = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.["@currencyId"] || market.currency;
         const price = parseFloat(priceStr);
         if (!price || price < 500) return null;
         const currencyMap: Record<string, string> = { GBP: "GBP", USD: "USD", EUR: "EUR" };
         const endTimeRaw = (item.listingInfo?.[0] as Record<string, unknown[]>)?.endTime?.[0] as string | undefined;
-        const soldDate = endTimeRaw
-          ? new Date(endTimeRaw).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        const soldTimestamp = endTimeRaw ? new Date(endTimeRaw).getTime() : undefined;
+        const soldDate = soldTimestamp
+          ? new Date(soldTimestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
           : undefined;
         return {
           title: (item.title?.[0] as string) || "",
           price,
-          currency: currencyMap[currencyId] || "GBP",
+          currency: currencyMap[currencyId] || market.currency,
           url: (item.viewItemURL?.[0] as string) || "",
-          source: "ebay.co.uk",
+          source: market.source,
           soldDate,
+          soldTimestamp,
         };
       })
       .filter(Boolean) as Listing[];
   } catch {
     return [];
   }
+}
+
+async function searchEbaySold(query: string, reference: string): Promise<Listing[]> {
+  const results = await Promise.all(
+    EBAY_MARKETS.map((market) => searchEbayMarket(query, reference, market))
+  );
+  return results.flat();
 }
 
 // ── Scrape a product page for its price via JSON-LD → meta tags → CSS ────────
@@ -347,6 +368,33 @@ async function serperChrono24Sold(query: string, condition: string, year: string
   } catch { return []; }
 }
 
+// ── Vestiaire Collective sold prices ─────────────────────────────────────────
+async function searchVestiaireSold(query: string, reference: string): Promise<Listing[]> {
+  if (!SERPER_API_KEY) return [];
+  try {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: `${query} sold site:vestiairecollective.com`,
+        num: 10,
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.organic || [])
+      .map((r: { title: string; snippet?: string; link: string }) => {
+        const fullText = `${r.title} ${r.snippet || ""}`;
+        if (!fullText.toLowerCase().includes(reference.toLowerCase())) return null;
+        const price = extractPrice(fullText);
+        if (!price) return null;
+        const soldDate = extractDate(fullText);
+        return { title: r.title, price, currency: detectCurrency(fullText, "GBP"), url: r.link, source: "vestiairecollective.com", soldDate };
+      })
+      .filter(Boolean) as Listing[];
+  } catch { return []; }
+}
+
 // ── Image search ──────────────────────────────────────────────────────────────
 async function getWatchImage(query: string): Promise<string | null> {
   if (!SERPER_API_KEY) return null;
@@ -392,11 +440,12 @@ export async function POST(req: NextRequest) {
 
   const imageQuery = `${make || ""} ${model || ""} ${reference} ${variantTerms} watch`.trim().replace(/\s+/g, " ");
 
-  const [ukResults, dubaiResults, ebayResults, chrono24Results, watchImage] = await Promise.all([
+  const [ukResults, dubaiResults, ebayResults, chrono24Results, vestilaireResults, watchImage] = await Promise.all([
     serperDealerSearch(baseQuery, UK_DEALERS, false),
     serperDealerSearch(baseQuery, DUBAI_DEALERS, true),
     searchEbaySold(ebayQuery, reference),
     serperChrono24Sold(baseQuery, condition, year || ""),
+    searchVestiaireSold(baseQuery, reference),
     getWatchImage(imageQuery),
   ]);
 
@@ -404,7 +453,7 @@ export async function POST(req: NextRequest) {
     (l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d))
   );
 
-  const soldListings = [...ebayResults, ...chrono24Results].filter(
+  const soldListings = [...ebayResults, ...chrono24Results, ...vestilaireResults].filter(
     (l) => !EXCLUDED_DOMAINS.filter((d) => !d.includes("chrono24")).some((d) => l.source.includes(d))
   );
 
@@ -414,10 +463,14 @@ export async function POST(req: NextRequest) {
   };
 
   const dedupedAsking = dedup(askingListings);
-  const dedupedSold = dedup(soldListings);
+  // Sort sold by most recent first — most useful for a dealer checking current market
+  const dedupedSold = dedup(soldListings).sort((a, b) => (b.soldTimestamp || 0) - (a.soldTimestamp || 0));
 
   const askingCurrency = dominantCurrency(dedupedAsking.length > 0 ? dedupedAsking : [{ currency: "GBP" }]);
   const soldCurrency = dominantCurrency(dedupedSold.length > 0 ? dedupedSold : [{ currency: "GBP" }]);
+
+  const filteredSold = dedupedSold.filter((l) => l.currency === soldCurrency);
+  const lowestSoldPrice = filteredSold.length > 0 ? Math.min(...filteredSold.map((l) => l.price)) : null;
 
   return NextResponse.json({
     watchImage,
@@ -426,8 +479,10 @@ export async function POST(req: NextRequest) {
       currency: askingCurrency,
     },
     sold: {
-      listings: dedupedSold.filter((l) => l.currency === soldCurrency).sort((a, b) => a.price - b.price),
+      // Sorted by most recent first — dealer wants to see current market
+      listings: filteredSold.sort((a, b) => (b.soldTimestamp || 0) - (a.soldTimestamp || 0)),
       currency: soldCurrency,
+      lowestPrice: lowestSoldPrice,
     },
   });
 }

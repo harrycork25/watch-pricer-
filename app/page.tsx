@@ -22,6 +22,7 @@ interface Listing {
 interface PriceGroup {
   listings: Listing[];
   currency: string;
+  lowestPrice?: number | null;
 }
 
 interface SearchResult {
@@ -424,10 +425,10 @@ export default function Home() {
               <>
                 <div className="grid grid-cols-1 gap-3 mb-8">
                   <StatCard label="Lowest Sold Price"
-                    price={result.sold.listings[0].price}
+                    price={result.sold.lowestPrice ?? result.sold.listings[0].price}
                     fromCurrency={result.sold.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
-                    url={result.sold.listings[0].url}
-                    source={result.sold.listings[0].source} />
+                    url={result.sold.listings.find(l => l.price === (result.sold.lowestPrice ?? result.sold.listings[0].price))?.url}
+                    source={result.sold.listings.find(l => l.price === (result.sold.lowestPrice ?? result.sold.listings[0].price))?.source} />
                 </div>
                 <ListingsBlock group={result.sold} label="All Sold Prices" displayCurrency={displayCurrency} convertPrice={convertPrice} />
               </>
