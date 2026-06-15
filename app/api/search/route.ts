@@ -15,7 +15,6 @@ const UK_DEALERS = [
   "trottersjewellers.com",
   "prestigiousjewellers.com",
   "watchfinder.co.uk",
-  "watchbox.com",
   "watchcollectors.co.uk",
 ];
 
@@ -44,7 +43,7 @@ const EXCLUDED_DOMAINS = [
   "harrods.com", "selfridges.com",
   "fratellowatches.com", "monochrome-watches.com", "ablogtowatch.com",
   "watchtime.com", "watchpro.com", "revolutionwatch.com", "timeandtidewatches.com",
-  "johnhardy.com", "dunhill.com",
+  "johnhardy.com", "dunhill.com", "watchbox.com", "watchguys.com", "crownandcaliber.com",
 ];
 
 type Listing = { title: string; price: number; currency: string; url: string; source: string; soldDate?: string };
