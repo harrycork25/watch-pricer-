@@ -42,7 +42,6 @@ interface HistoryEntry {
   dialColour: string;
   photo: string | null;
   watchImage: string | null;
-  highestAsking: number | null;
   lowestAsking: number | null;
   lowestSold: number | null;
   currency: string;
@@ -141,7 +140,7 @@ function HistoryCard({ entry, onRestore, onDelete }: {
             </p>
             <div className="flex gap-3 mt-2">
               {entry.lowestAsking && (
-                <span className="text-xs text-gray-400">Ask: <span className="text-white">{symbol}{entry.lowestAsking.toLocaleString()}–{entry.highestAsking?.toLocaleString()}</span></span>
+                <span className="text-xs text-gray-400">Ask: <span className="text-white">{symbol}{entry.lowestAsking.toLocaleString()}</span></span>
               )}
               {entry.lowestSold && (
                 <span className="text-xs text-gray-400">Sold: <span className="text-white">{symbol}{entry.lowestSold.toLocaleString()}</span></span>
@@ -208,7 +207,6 @@ export default function Home() {
       material, dialColour,
       photo,
       watchImage: data.watchImage || null,
-      highestAsking: data.asking.listings.length > 0 ? data.asking.listings[data.asking.listings.length - 1].price : null,
       lowestAsking: data.asking.listings.length > 0 ? data.asking.listings[0].price : null,
       lowestSold: data.sold.listings.length > 0 ? data.sold.listings[0].price : null,
       currency: data.asking.currency || data.sold.currency || "GBP",
@@ -400,11 +398,6 @@ export default function Home() {
             {(result.asking.listings.length > 0 || result.sold.listings.length > 0) && (
               <>
                 <div className="grid grid-cols-1 gap-3 mb-8">
-                  <StatCard label="Highest Asking Price"
-                    price={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].price : null}
-                    fromCurrency={result.asking.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
-                    url={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].url : undefined}
-                    source={result.asking.listings.length > 0 ? result.asking.listings[result.asking.listings.length - 1].source : undefined} />
                   <StatCard label="Lowest Asking Price"
                     price={result.asking.listings.length > 0 ? result.asking.listings[0].price : null}
                     fromCurrency={result.asking.currency} displayCurrency={displayCurrency} convertPrice={convertPrice}
