@@ -70,6 +70,29 @@ function extractPrice(text: string): number | null {
   return null;
 }
 
+function extractDate(text: string): string | undefined {
+  const months = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December";
+  const patterns = [
+    new RegExp(`(\\d{1,2})\\s+(${months})\\s+(\\d{4})`, "i"),   // 15 Jun 2025
+    new RegExp(`(${months})\\s+(\\d{1,2}),?\\s+(\\d{4})`, "i"), // Jun 15, 2025
+    new RegExp(`(${months})\\s+(\\d{4})`, "i"),                  // Jun 2025
+    /(\d{4})-(\d{2})-(\d{2})/,                                   // 2025-06-15
+    /(\d{1,2})\/(\d{1,2})\/(\d{4})/,                             // 15/06/2025
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) {
+      try {
+        const d = new Date(m[0]);
+        if (!isNaN(d.getTime()) && d.getFullYear() > 2010) {
+          return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+        }
+      } catch { /* skip */ }
+    }
+  }
+  return undefined;
+}
+
 function detectCurrency(text: string, defaultCurrency = "GBP"): string {
   if (text.includes("£") || /\bGBP\b/i.test(text)) return "GBP";
   if (/\bAED\b/i.test(text) || text.includes("د.إ")) return "AED";
@@ -297,7 +320,7 @@ async function serperChrono24Sold(query: string): Promise<Listing[]> {
         const fullText = `${r.title} ${r.snippet || ""}`;
         const price = extractPrice(fullText);
         if (!price) return null;
-        return { title: r.title, price, currency: detectCurrency(fullText, "GBP"), url: r.link, source: "chrono24.com" };
+        return { title: r.title, price, currency: detectCurrency(fullText, "GBP"), url: r.link, source: "chrono24.com", soldDate: extractDate(fullText) };
       })
       .filter(Boolean) as Listing[];
   } catch { return []; }
