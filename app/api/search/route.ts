@@ -108,7 +108,7 @@ function dominantCurrency(listings: { currency: string }[]) {
 }
 
 // ── eBay completed/sold listings ──────────────────────────────────────────────
-async function searchEbaySold(query: string): Promise<Listing[]> {
+async function searchEbaySold(query: string, reference: string): Promise<Listing[]> {
   if (!EBAY_APP_ID) return [];
   try {
     const params = new URLSearchParams({
@@ -130,9 +130,12 @@ async function searchEbaySold(query: string): Promise<Listing[]> {
     const data = await res.json();
     const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
     return items
-      .filter((item: Record<string, unknown[]>) =>
-        (item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] === "EndedWithSales"
-      )
+      .filter((item: Record<string, unknown[]>) => {
+        if ((item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] !== "EndedWithSales") return false;
+        // Must contain the exact reference number in the title
+        const title = ((item.title?.[0] as string) || "").toLowerCase();
+        return title.includes(reference.toLowerCase());
+      })
       .map((item: Record<string, unknown[]>) => {
         const priceObj = item.sellingStatus?.[0] as Record<string, unknown[]>;
         const priceStr = (priceObj?.convertedCurrentPrice?.[0] as Record<string, string>)?.__value__ || "";
@@ -359,7 +362,13 @@ export async function POST(req: NextRequest) {
     dialColour && dialColour !== "any" ? `${dialColour} dial` : "",
   ].filter(Boolean).join(" ");
 
-  const baseQuery = `${make || ""} ${model || ""} ${reference} ${year || ""} ${variantTerms} ${conditionTerm} watch`
+  // Reference number in quotes forces exact match — prevents other models showing up
+  const quotedRef = `"${reference}"`;
+  const baseQuery = `${make || ""} ${model || ""} ${quotedRef} ${year || ""} ${variantTerms} ${conditionTerm} watch`
+    .trim().replace(/\s+/g, " ");
+
+  // eBay query: reference in quotes, no condition/year noise to avoid over-filtering
+  const ebayQuery = `${make || ""} ${model || ""} ${quotedRef} ${variantTerms}`
     .trim().replace(/\s+/g, " ");
 
   const imageQuery = `${make || ""} ${model || ""} ${reference} ${variantTerms} watch`.trim().replace(/\s+/g, " ");
@@ -367,7 +376,7 @@ export async function POST(req: NextRequest) {
   const [ukResults, dubaiResults, ebayResults, chrono24Results, watchImage] = await Promise.all([
     serperDealerSearch(baseQuery, UK_DEALERS, false),
     serperDealerSearch(baseQuery, DUBAI_DEALERS, true),
-    searchEbaySold(baseQuery),
+    searchEbaySold(ebayQuery, reference),
     serperChrono24Sold(baseQuery),
     getWatchImage(imageQuery),
   ]);
