@@ -350,7 +350,7 @@ async function getWatchImage(query: string): Promise<string | null> {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const { reference, make, model, year, condition, material, dialColour } = await req.json();
+  const { reference, make, model, year, condition, material, dialColour, bracelet } = await req.json();
 
   if (!reference) {
     return NextResponse.json({ error: "Reference number is required" }, { status: 400 });
@@ -360,6 +360,7 @@ export async function POST(req: NextRequest) {
   const variantTerms = [
     material && material !== "any" ? material : "",
     dialColour && dialColour !== "any" ? `${dialColour} dial` : "",
+    bracelet && bracelet !== "any" ? bracelet : "",
   ].filter(Boolean).join(" ");
 
   // Reference number in quotes forces exact match — prevents other models showing up

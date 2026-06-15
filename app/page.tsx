@@ -41,6 +41,7 @@ interface HistoryEntry {
   condition: "new" | "used";
   material: string;
   dialColour: string;
+  bracelet: string;
   photo: string | null;
   watchImage: string | null;
   highestSold: number | null;
@@ -140,7 +141,7 @@ function HistoryCard({ entry, onRestore, onDelete }: {
               {[entry.make, entry.model, entry.reference].filter(Boolean).join(" ")}
             </p>
             <p className="text-gray-500 text-xs mt-0.5">
-              {[entry.year, entry.condition, entry.material !== "any" ? entry.material : "", entry.dialColour !== "any" ? entry.dialColour : ""].filter(Boolean).join(" · ")}
+              {[entry.year, entry.condition, entry.material !== "any" ? entry.material : "", entry.dialColour !== "any" ? entry.dialColour : "", entry.bracelet !== "any" ? entry.bracelet : ""].filter(Boolean).join(" · ")}
             </p>
             <div className="flex gap-3 mt-2">
               {entry.lowestSold && (
@@ -171,6 +172,7 @@ export default function Home() {
   const [condition, setCondition] = useState<"new" | "used">("used");
   const [material, setMaterial] = useState("any");
   const [dialColour, setDialColour] = useState("any");
+  const [bracelet, setBracelet] = useState("any");
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -205,7 +207,7 @@ export default function Home() {
       id: Date.now().toString(),
       timestamp: Date.now(),
       make, model, reference, year, condition,
-      material, dialColour,
+      material, dialColour, bracelet,
       photo,
       watchImage: data.watchImage || null,
       highestSold: data.sold.listings.length > 0 ? data.sold.listings[data.sold.listings.length - 1].price : null,
@@ -231,6 +233,7 @@ export default function Home() {
     setCondition(entry.condition);
     setMaterial(entry.material);
     setDialColour(entry.dialColour);
+    setBracelet(entry.bracelet);
     setPhoto(entry.photo);
     setResult(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -252,7 +255,7 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: reference.trim(), make: make.trim(), model: model.trim(), year, condition, material, dialColour }),
+        body: JSON.stringify({ reference: reference.trim(), make: make.trim(), model: model.trim(), year, condition, material, dialColour, bracelet }),
       });
       const data = await res.json();
       setResult(data);
@@ -327,16 +330,21 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Case Material</label>
               <input type="text" value={material === "any" ? "" : material} onChange={(e) => setMaterial(e.target.value || "any")}
-                placeholder="e.g. bimetal, full gold" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm" />
+                placeholder="e.g. bimetal" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Dial Colour</label>
               <input type="text" value={dialColour === "any" ? "" : dialColour} onChange={(e) => setDialColour(e.target.value || "any")}
-                placeholder="e.g. black, blue" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm" />
+                placeholder="e.g. black" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Bracelet</label>
+              <input type="text" value={bracelet === "any" ? "" : bracelet} onChange={(e) => setBracelet(e.target.value || "any")}
+                placeholder="e.g. Oysterflex" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 text-sm" />
             </div>
           </div>
 
