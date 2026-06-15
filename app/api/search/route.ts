@@ -100,6 +100,18 @@ function detectCurrency(text: string, defaultCurrency = "GBP"): string {
   return defaultCurrency;
 }
 
+const FAKE_TERMS = [
+  "replica", "homage", "clone", "fake", "copy", "counterfeit",
+  "super clone", "superclone", "noob", "1:1", "aaaa", "aaa grade",
+  "case only", "dial only", "movement only", "bracelet only", "bezel only",
+  "parts only", "for parts", "not working", "spares or repairs",
+];
+
+function isFakeListing(title: string): boolean {
+  const lower = title.toLowerCase();
+  return FAKE_TERMS.some((t) => lower.includes(t));
+}
+
 function dominantCurrency(listings: { currency: string }[]) {
   const counts: Record<string, number> = {};
   listings.forEach((l) => { counts[l.currency] = (counts[l.currency] || 0) + 1; });
@@ -144,8 +156,10 @@ async function searchEbayMarket(
     return items
       .filter((item: Record<string, unknown[]>) => {
         if ((item.sellingStatus?.[0] as Record<string, unknown[]>)?.sellingState?.[0] !== "EndedWithSales") return false;
-        const title = ((item.title?.[0] as string) || "").toLowerCase();
-        return title.includes(reference.toLowerCase());
+        const title = (item.title?.[0] as string) || "";
+        if (!title.toLowerCase().includes(reference.toLowerCase())) return false;
+        if (isFakeListing(title)) return false;
+        return true;
       })
       .map((item: Record<string, unknown[]>) => {
         const priceObj = item.sellingStatus?.[0] as Record<string, unknown[]>;
@@ -452,11 +466,11 @@ export async function POST(req: NextRequest) {
   ]);
 
   const askingListings = [...ukResults, ...dubaiResults].filter(
-    (l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d))
+    (l) => !EXCLUDED_DOMAINS.some((d) => l.source.includes(d)) && !isFakeListing(l.title)
   );
 
   const soldListings = [...ebayResults, ...chrono24Results, ...vestilaireResults].filter(
-    (l) => !EXCLUDED_DOMAINS.filter((d) => !d.includes("chrono24")).some((d) => l.source.includes(d))
+    (l) => !EXCLUDED_DOMAINS.filter((d) => !d.includes("chrono24")).some((d) => l.source.includes(d)) && !isFakeListing(l.title)
   );
 
   const dedup = (arr: Listing[]) => {
